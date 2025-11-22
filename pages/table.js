@@ -5,8 +5,12 @@ import PranSelection from '../components/PranSelection';
 import AudioPlayer from '../components/AudioPlayer';
 import CelebrationAnimation from '../components/CelebrationAnimation';
 import SelectedPranDisplay from '../components/SelectedPranDisplay';
+import AudioPermissionPrompt from '../components/AudioPermissionPrompt';
 import api from '../lib/api';
 import getAudioCoordinator from '../lib/audioCoordinator';
+import AudioManager from '../lib/audioManager';
+import getCdnUrl from '../lib/cdnUtils';
+import getAudioPermissionManager from '../lib/audioPermissions';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   setCurrentPhase,
@@ -49,6 +53,9 @@ const TableScreen = () => {
   // Selected pran display state
   const [selectedPranLabel, setSelectedPranLabel] = useState(null);
   
+  // Audio permission state
+  const [audioPermissionGranted, setAudioPermissionGranted] = useState(false);
+  
   // Background audio state
   const [backgroundAudioPath, setBackgroundAudioPath] = useState(null); // bg1
   const backgroundAudioRef = useRef(null);
@@ -65,6 +72,28 @@ const TableScreen = () => {
         audio.currentTime = 0;
       }
       return;
+    }
+    
+    // Log the URL being used for debugging
+    const cdnUrl = getCdnUrl(backgroundAudioPath);
+    console.log('Background audio - original path:', backgroundAudioPath);
+    console.log('Background audio - is full URL?', backgroundAudioPath?.startsWith('http'));
+    console.log('Background audio - CDN URL:', cdnUrl);
+    
+    // Validate the URL before using it
+    if (cdnUrl && cdnUrl.includes('https://') && cdnUrl.includes('https://', 1)) {
+      console.error('ERROR: Detected double URL prefix in background audio!', cdnUrl);
+      // Try to extract just the CDN part
+      const cdnMatch = cdnUrl.match(/https:\/\/[^\/]+\.cloudfront\.net\/.+/);
+      if (cdnMatch) {
+        console.warn('Extracted CDN URL:', cdnMatch[0]);
+      }
+    }
+    
+    // Explicitly set the src to ensure it's correct (defensive)
+    if (audio.src !== cdnUrl) {
+      audio.src = cdnUrl;
+      console.log('Background audio - Set src explicitly to:', audio.src);
     }
     
     const playBackgroundAudio = async () => {
@@ -118,18 +147,30 @@ const TableScreen = () => {
       audio.removeEventListener('loadeddata', handleLoadedData);
       audio.removeEventListener('error', handleError);
     };
-  }, [backgroundAudioPath, pran]);
+  }, [backgroundAudioPath, pran, audioPermissionGranted]);
   
   // Handle bg2 audio playback (after pran selection)
   useEffect(() => {
     const audio = bg2AudioRef.current;
-    if (!audio || !bg2AudioPath || !pran) {
-      // Stop audio if pran is not selected or path is cleared
-      if (audio && (!pran || !bg2AudioPath)) {
+    // Don't play audio until permission is granted
+    if (!audio || !bg2AudioPath || !pran || !audioPermissionGranted) {
+      // Stop audio if pran is not selected or path is cleared or permission not granted
+      if (audio && (!pran || !bg2AudioPath || !audioPermissionGranted)) {
         audio.pause();
         audio.currentTime = 0;
       }
       return;
+    }
+    
+    // Log and explicitly set the URL
+    const cdnUrl = getCdnUrl(bg2AudioPath);
+    console.log('Background audio (bg2) - original path:', bg2AudioPath);
+    console.log('Background audio (bg2) - CDN URL:', cdnUrl);
+    
+    // Explicitly set the src to ensure it's correct (defensive)
+    if (audio.src !== cdnUrl) {
+      audio.src = cdnUrl;
+      console.log('Background audio (bg2) - Set src explicitly to:', audio.src);
     }
     
     const playBg2Audio = async () => {
@@ -183,8 +224,16 @@ const TableScreen = () => {
       audio.removeEventListener('loadeddata', handleLoadedData);
       audio.removeEventListener('error', handleError);
     };
-  }, [bg2AudioPath, pran]);
+  }, [bg2AudioPath, pran, audioPermissionGranted]);
   
+  // Check if audio permission was already granted (from previous session)
+  useEffect(() => {
+    const permissionManager = getAudioPermissionManager();
+    if (permissionManager.isUnlocked()) {
+      setAudioPermissionGranted(true);
+    }
+  }, []);
+
   // Table screen is always the audio master
   useEffect(() => {
     const coordinator = getAudioCoordinator();
@@ -195,6 +244,14 @@ const TableScreen = () => {
       // Don't release on unmount, let it handle naturally
     };
   }, []);
+
+  // Initialize audio manager
+  const audioManagerRef = useRef(null);
+  useEffect(() => {
+    if (socket) {
+      audioManagerRef.current = new AudioManager(socket);
+    }
+  }, [socket]);
 
   useEffect(() => {
     if (!socket || !session) return;
@@ -271,12 +328,27 @@ const TableScreen = () => {
       }
     });
 
-    // Handle audio events
-    socket.on('audio_play', ({ audioPath, audioId }) => {
+    // Handle audio play requests from mirror screen (frontend-controlled)
+    socket.on('request_audio_play', ({ audioPath, audioId }) => {
+      // Only play audio if permission is granted
+      if (!audioPermissionGranted) {
+        console.warn('Audio permission not granted yet, ignoring audio play request');
+        return;
+      }
+      // Play audio locally
       dispatch(setCurrentAudio(audioPath));
       dispatch(setCurrentAudioId(audioId));
+      window.dispatchEvent(new Event('audio:play'));
       
-      // Update queue index if this audio is in the queue (for positive flow audio 3 manual play)
+      // Notify backend for state tracking
+      if (audioManagerRef.current) {
+        audioManagerRef.current.playAudio(audioPath, audioId);
+      }
+      
+      // Emit visual update event for mirror screen (frontend-controlled)
+      socket.emit('audio_visual_update', { audioPath, audioId });
+      
+      // Update queue index if this audio is in the queue
       if (audioQueue.length > 0 && audioId) {
         const audioIndex = audioQueue.findIndex(a => a._id === audioId);
         if (audioIndex !== -1 && audioIndex !== currentQueueIndex) {
@@ -284,34 +356,10 @@ const TableScreen = () => {
           dispatch(setCurrentQueueIndex(audioIndex));
         }
       }
-      
-      // Check if this is audio 8 (Choosing-Emotion) in COMMON flow
-      // Fallback: Show mood selection even if cue point is not set
-      if (currentPhase === 'COMMON_FLOW' && audioQueue.length > 0) {
-        // Find current audio in queue by matching audioId or path
-        const currentAudioInQueue = audioQueue.find(a => 
-          a._id === audioId || 
-          a.filePath === audioPath ||
-          (a.sequence === 8 && (audioPath.includes('Choosing-Emotion') || audioPath.includes('choosing-emotion')))
-        );
-        
-        if (currentAudioInQueue && currentAudioInQueue.sequence === 8) {
-          console.log('Audio 8 (Choosing-Emotion) detected - showing mood selection as fallback');
-          // Set waiting flag - we're waiting for user to select mood
-          dispatch(setWaitingForMoodSelection(true));
-          // Small delay to ensure state is updated
-          setTimeout(() => {
-            dispatch(setCurrentPhase('MOOD_SELECTION'));
-            if (socket) {
-              socket.emit('force_phase', { phase: 'MOOD_SELECTION' });
-            }
-          }, 100);
-        }
-      }
-      
-      // Trigger play event
-      window.dispatchEvent(new Event('audio:play'));
     });
+
+    // REMOVED: socket.on('audio_play') - Frontend now controls playback directly
+    // Backend only tracks state via audio_state_update events
 
     socket.on('audio_pause', () => {
       window.dispatchEvent(new Event('audio:pause'));
@@ -380,15 +428,47 @@ const TableScreen = () => {
       
       // Continue to next audio now that pran is selected
       if (currentQueueIndex < audioQueue.length - 1) {
+        // Only play audio if permission is granted
+        if (!audioPermissionGranted) {
+          console.warn('Audio permission not granted yet, queueing audio for later');
+          return;
+        }
         const nextIndex = currentQueueIndex + 1;
         const nextAudio = audioQueue[nextIndex];
         console.log('Pran selected - Continuing to next audio:', nextAudio.fileName);
         dispatch(setCurrentQueueIndex(nextIndex));
+        dispatch(setCurrentAudio(nextAudio.filePath));
+        dispatch(setCurrentAudioId(nextAudio._id));
+        window.dispatchEvent(new Event('audio:play'));
+        
+        // Emit visual update event for mirror screen (frontend-controlled)
         if (socket) {
-          socket.emit('audio_play', {
-            audioPath: nextAudio.filePath,
-            audioId: nextAudio._id,
-            cue: nextIndex
+          socket.emit('audio_visual_update', { audioPath: nextAudio.filePath, audioId: nextAudio._id });
+        }
+        
+        // Notify backend for state tracking
+        if (audioManagerRef.current) {
+          audioManagerRef.current.playAudio(nextAudio.filePath, nextAudio._id, nextIndex);
+        }
+        
+        // Handle cue points locally
+        if (audioManagerRef.current && nextAudio._id) {
+          console.log(`Checking cue point for next audio: ${nextAudio.fileName} (sequence: ${nextAudio.sequence}, ID: ${nextAudio._id})`);
+          audioManagerRef.current.checkCuePoint(nextAudio._id, session).then(cueData => {
+            if (cueData) {
+              console.log(`Cue point found! Dispatching window event:`, cueData);
+              window.dispatchEvent(new CustomEvent('cue_trigger', { detail: cueData }));
+            } else {
+              console.log(`No cue point found for audio: ${nextAudio.fileName}`);
+            }
+          }).catch(error => {
+            console.error('Error in checkCuePoint promise:', error);
+          });
+        } else {
+          console.warn('Cannot check cue point - audioManager or audioId missing:', {
+            hasAudioManager: !!audioManagerRef.current,
+            hasAudioId: !!nextAudio._id,
+            audioName: nextAudio?.fileName
           });
         }
       }
@@ -442,15 +522,47 @@ const TableScreen = () => {
       }
     });
 
+    // Also listen for window CustomEvent for cue_trigger (dispatched by checkCuePoint)
+    const handleCueTriggerWindowEvent = (event) => {
+      console.log('Window cue_trigger event received:', event);
+      const cueData = event.detail;
+      if (!cueData) {
+        console.warn('Window cue_trigger event has no detail data');
+        return;
+      }
+      
+      const { cuePoint, data } = cueData;
+      console.log('Cue triggered (from window event):', cuePoint, data);
+      
+      if (cuePoint === 'PRAN_SELECTION') {
+        console.log('PRAN_SELECTION cue triggered - showing pran buttons');
+        dispatch(setShowPranSelection(true));
+        dispatch(setCurrentPhase('PRAN_SELECTION'));
+        if (socket) {
+          socket.emit('force_phase', { phase: 'PRAN_SELECTION' });
+        }
+      } else if (cuePoint === 'MOOD_SELECTION') {
+        console.log('MOOD_SELECTION cue triggered - showing mood selection immediately');
+        dispatch(setWaitingForMoodSelection(true));
+        dispatch(setCurrentPhase('MOOD_SELECTION'));
+        if (socket) {
+          socket.emit('force_phase', { phase: 'MOOD_SELECTION' });
+        }
+      }
+    };
+
+    window.addEventListener('cue_trigger', handleCueTriggerWindowEvent);
+
     return () => {
       socket.off('phase_changed');
       socket.off('session_reset');
-      socket.off('audio_play');
+      socket.off('request_audio_play');
       socket.off('audio_pause');
       socket.off('audio_stop');
       socket.off('mood_selected');
       socket.off('pran_selected');
       socket.off('cue_trigger');
+      window.removeEventListener('cue_trigger', handleCueTriggerWindowEvent);
     };
   }, [socket, session, dispatch, currentPhase, audioQueue, currentQueueIndex, pran]);
 
@@ -482,8 +594,18 @@ const TableScreen = () => {
           console.log('bg1 filePath:', bg1Audio.filePath);
           console.log('bg1 fileName:', bg1Audio.fileName);
           if (!pran) {
-            console.log('Starting background audio (bg1):', bg1Audio.fileName, 'at path:', bg1Audio.filePath);
-            setBackgroundAudioPath(bg1Audio.filePath);
+            // Database should already have full URLs - use directly
+            const audioPath = bg1Audio.filePath;
+            console.log('Starting background audio (bg1):', bg1Audio.fileName);
+            console.log('Raw filePath from database:', audioPath);
+            console.log('Path type check - is full URL?', audioPath?.startsWith('http'));
+            
+            // Validate the path before setting it
+            if (audioPath && audioPath.includes('https://') && audioPath.indexOf('https://', 1) !== -1) {
+              console.error('ERROR: Database contains malformed URL!', audioPath);
+            }
+            
+            setBackgroundAudioPath(audioPath);
           }
         } else {
           console.warn('bg1.mp3 not found in COMMON audio files. Available files:', response.data.map(a => a.fileName));
@@ -495,14 +617,44 @@ const TableScreen = () => {
           }
         }
         
-        // Auto-play first audio
-        if (sorted.length > 0 && socket) {
+        // Auto-play first audio (only if permission is granted)
+        if (sorted.length > 0 && audioPermissionGranted) {
           console.log(`Playing first audio: ${sorted[0].fileName} (sequence: ${sorted[0].sequence}, cuePoint: ${sorted[0].cuePoint})`);
-          socket.emit('audio_play', {
-            audioPath: sorted[0].filePath,
-            audioId: sorted[0]._id,
-            cue: 0
-          });
+          dispatch(setCurrentAudio(sorted[0].filePath));
+          dispatch(setCurrentAudioId(sorted[0]._id));
+          dispatch(setCurrentQueueIndex(0));
+          window.dispatchEvent(new Event('audio:play'));
+          
+          // Emit visual update event for mirror screen (frontend-controlled)
+          if (socket) {
+            socket.emit('audio_visual_update', { audioPath: sorted[0].filePath, audioId: sorted[0]._id });
+          }
+          
+          // Notify backend for state tracking
+          if (audioManagerRef.current) {
+            audioManagerRef.current.playAudio(sorted[0].filePath, sorted[0]._id, 0);
+          }
+          
+          // Handle cue points locally
+          if (audioManagerRef.current && sorted[0]._id) {
+            console.log(`Checking cue point for first audio: ${sorted[0].fileName} (sequence: ${sorted[0].sequence}, ID: ${sorted[0]._id})`);
+            audioManagerRef.current.checkCuePoint(sorted[0]._id, session).then(cueData => {
+              if (cueData) {
+                console.log(`Cue point found! Dispatching window event:`, cueData);
+                window.dispatchEvent(new CustomEvent('cue_trigger', { detail: cueData }));
+              } else {
+                console.log(`No cue point found for audio: ${sorted[0].fileName}`);
+              }
+            }).catch(error => {
+              console.error('Error in checkCuePoint promise:', error);
+            });
+          } else {
+            console.warn('Cannot check cue point - audioManager or audioId missing:', {
+              hasAudioManager: !!audioManagerRef.current,
+              hasAudioId: !!sorted[0]?._id,
+              audioName: sorted[0]?.fileName
+            });
+          }
         }
       } else if (currentPhase === 'CATEGORY_FLOW' && session?.category && !queueLoaded) {
         console.log(`Loading CATEGORY_FLOW audio queue for ${session.category}...`);
@@ -511,14 +663,44 @@ const TableScreen = () => {
         dispatch(setAudioQueue(sorted));
         dispatch(setCurrentQueueIndex(0));
         dispatch(setQueueLoaded(true));
-        // Auto-play first audio
-        if (sorted.length > 0 && socket) {
+        // Auto-play first audio (only if permission is granted)
+        if (sorted.length > 0 && audioPermissionGranted) {
           console.log(`Playing first audio: ${sorted[0].fileName} (sequence: ${sorted[0].sequence}, cuePoint: ${sorted[0].cuePoint})`);
-          socket.emit('audio_play', {
-            audioPath: sorted[0].filePath,
-            audioId: sorted[0]._id,
-            cue: 0
-          });
+          dispatch(setCurrentAudio(sorted[0].filePath));
+          dispatch(setCurrentAudioId(sorted[0]._id));
+          dispatch(setCurrentQueueIndex(0));
+          window.dispatchEvent(new Event('audio:play'));
+          
+          // Emit visual update event for mirror screen (frontend-controlled)
+          if (socket) {
+            socket.emit('audio_visual_update', { audioPath: sorted[0].filePath, audioId: sorted[0]._id });
+          }
+          
+          // Notify backend for state tracking
+          if (audioManagerRef.current) {
+            audioManagerRef.current.playAudio(sorted[0].filePath, sorted[0]._id, 0);
+          }
+          
+          // Handle cue points locally
+          if (audioManagerRef.current && sorted[0]._id) {
+            console.log(`Checking cue point for first audio: ${sorted[0].fileName} (sequence: ${sorted[0].sequence}, ID: ${sorted[0]._id})`);
+            audioManagerRef.current.checkCuePoint(sorted[0]._id, session).then(cueData => {
+              if (cueData) {
+                console.log(`Cue point found! Dispatching window event:`, cueData);
+                window.dispatchEvent(new CustomEvent('cue_trigger', { detail: cueData }));
+              } else {
+                console.log(`No cue point found for audio: ${sorted[0].fileName}`);
+              }
+            }).catch(error => {
+              console.error('Error in checkCuePoint promise:', error);
+            });
+          } else {
+            console.warn('Cannot check cue point - audioManager or audioId missing:', {
+              hasAudioManager: !!audioManagerRef.current,
+              hasAudioId: !!sorted[0]?._id,
+              audioName: sorted[0]?.fileName
+            });
+          }
         }
       }
     };
@@ -528,6 +710,11 @@ const TableScreen = () => {
 
   const handleAudioEnd = () => {
     console.log(`Audio ended. Current index: ${currentQueueIndex}, Queue length: ${audioQueue.length}, Phase: ${currentPhase}, Waiting for mood: ${waitingForMoodSelection}`);
+    
+    // Notify backend that audio stopped
+    if (audioManagerRef.current) {
+      audioManagerRef.current.stopAudio();
+    }
     
     // Emit audio_stop event so mirror screen can react (e.g., show images after audio 2)
     if (socket) {
@@ -648,13 +835,45 @@ const TableScreen = () => {
       
       // Play next audio after pause (if any)
       const playNextAudio = () => {
+        // Only play audio if permission is granted
+        if (!audioPermissionGranted) {
+          console.warn('Audio permission not granted yet, queueing audio for later');
+          return;
+        }
         console.log(`Playing next audio: ${nextAudio.fileName} (sequence: ${nextAudio.sequence}, index: ${nextIndex}, cuePoint: ${nextAudio.cuePoint})`);
         dispatch(setCurrentQueueIndex(nextIndex));
+        dispatch(setCurrentAudio(nextAudio.filePath));
+        dispatch(setCurrentAudioId(nextAudio._id));
+        window.dispatchEvent(new Event('audio:play'));
+        
+        // Emit visual update event for mirror screen (frontend-controlled)
         if (socket) {
-          socket.emit('audio_play', {
-            audioPath: nextAudio.filePath,
-            audioId: nextAudio._id,
-            cue: nextIndex
+          socket.emit('audio_visual_update', { audioPath: nextAudio.filePath, audioId: nextAudio._id });
+        }
+        
+        // Notify backend for state tracking
+        if (audioManagerRef.current) {
+          audioManagerRef.current.playAudio(nextAudio.filePath, nextAudio._id, nextIndex);
+        }
+        
+        // Handle cue points locally
+        if (audioManagerRef.current && nextAudio._id) {
+          console.log(`Checking cue point for next audio: ${nextAudio.fileName} (sequence: ${nextAudio.sequence}, ID: ${nextAudio._id})`);
+          audioManagerRef.current.checkCuePoint(nextAudio._id, session).then(cueData => {
+            if (cueData) {
+              console.log(`Cue point found! Dispatching window event:`, cueData);
+              window.dispatchEvent(new CustomEvent('cue_trigger', { detail: cueData }));
+            } else {
+              console.log(`No cue point found for audio: ${nextAudio.fileName}`);
+            }
+          }).catch(error => {
+            console.error('Error in checkCuePoint promise:', error);
+          });
+        } else {
+          console.warn('Cannot check cue point - audioManager or audioId missing:', {
+            hasAudioManager: !!audioManagerRef.current,
+            hasAudioId: !!nextAudio._id,
+            audioName: nextAudio?.fileName
           });
         }
       };
@@ -750,6 +969,16 @@ const TableScreen = () => {
 
   return (
     <div className="min-h-screen bg-black">
+      {/* Audio Permission Prompt - Shows before audio can play */}
+      {!audioPermissionGranted && (
+        <AudioPermissionPrompt
+          onPermissionGranted={() => {
+            setAudioPermissionGranted(true);
+            console.log('Audio permission granted by user');
+          }}
+        />
+      )}
+      
       {renderPhase()}
       {showCelebration && (
         <CelebrationAnimation
@@ -765,7 +994,8 @@ const TableScreen = () => {
           category={session.category}
         />
       )}
-      {currentAudio && (
+      {/* Only render AudioPlayer after permission is granted */}
+      {currentAudio && audioPermissionGranted && (
         <AudioPlayer
           audioPath={currentAudio}
           onEnded={handleAudioEnd}
@@ -776,20 +1006,33 @@ const TableScreen = () => {
       {backgroundAudioPath && (
         <audio
           ref={backgroundAudioRef}
-          src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${encodeURI(backgroundAudioPath)}`}
+          src={getCdnUrl(backgroundAudioPath)}
           loop
           preload="auto"
           style={{ display: 'none' }}
-          crossOrigin="anonymous"
+          // Temporarily removed crossOrigin until CloudFront CORS is configured
+          // crossOrigin="anonymous"
           onPlay={() => {
             console.log('Background audio (bg1) started playing');
             console.log('Audio src:', backgroundAudioRef.current?.src);
             console.log('Audio volume:', backgroundAudioRef.current?.volume);
           }}
           onError={(e) => {
-            console.error('Background audio error:', e);
-            console.error('Audio src:', backgroundAudioRef.current?.src);
-            console.error('Audio error details:', backgroundAudioRef.current?.error);
+            const audio = e.target;
+            const error = audio.error;
+            console.error('Background audio (bg1) error:', e);
+            console.error('Audio src:', audio.src);
+            
+            if (error) {
+              console.error('Audio error code:', error.code);
+              console.error('Audio error message:', error.message);
+              console.error('Audio readyState:', audio.readyState);
+              
+              if (error.code === 4) {
+                console.error('Format error: Check CloudFront CORS configuration and Content-Type headers');
+                console.error('CloudFront needs CORS headers: Access-Control-Allow-Origin: *');
+              }
+            }
           }}
           onLoadedMetadata={() => {
             console.log('Background audio (bg1) metadata loaded');
@@ -801,20 +1044,33 @@ const TableScreen = () => {
       {bg2AudioPath && pran && (
         <audio
           ref={bg2AudioRef}
-          src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${encodeURI(bg2AudioPath)}`}
+          src={getCdnUrl(bg2AudioPath)}
           loop
           preload="auto"
           style={{ display: 'none' }}
-          crossOrigin="anonymous"
+          // Temporarily removed crossOrigin until CloudFront CORS is configured
+          // crossOrigin="anonymous"
           onPlay={() => {
             console.log('Background audio (bg2) started playing');
             console.log('Audio src:', bg2AudioRef.current?.src);
             console.log('Audio volume:', bg2AudioRef.current?.volume);
           }}
           onError={(e) => {
+            const audio = e.target;
+            const error = audio.error;
             console.error('Background audio (bg2) error:', e);
-            console.error('Audio src:', bg2AudioRef.current?.src);
-            console.error('Audio error details:', bg2AudioRef.current?.error);
+            console.error('Audio src:', audio.src);
+            
+            if (error) {
+              console.error('Audio error code:', error.code);
+              console.error('Audio error message:', error.message);
+              console.error('Audio readyState:', audio.readyState);
+              
+              if (error.code === 4) {
+                console.error('Format error: Check CloudFront CORS configuration and Content-Type headers');
+                console.error('CloudFront needs CORS headers: Access-Control-Allow-Origin: *');
+              }
+            }
           }}
           onLoadedMetadata={() => {
             console.log('Background audio (bg2) metadata loaded');

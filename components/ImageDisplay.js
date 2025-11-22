@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../lib/api';
+import getCdnUrl from '../lib/cdnUtils';
 
 const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = null }) => {
   const [images, setImages] = useState([]);
@@ -17,10 +18,8 @@ const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = n
     if (images.length === 0) return;
 
     images.forEach((img) => {
-      const imageUrl = img.filePath?.startsWith('http')
-        ? img.filePath
-        : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${img.filePath}`;
-      
+      // Use CDN URL
+      const imageUrl = getCdnUrl(img.filePath);
       const preloadImg = new Image();
       preloadImg.src = imageUrl;
     });
@@ -183,12 +182,10 @@ const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = n
 
   const currentImage = images[currentIndex];
 
-  // Construct full URL
+  // Construct full URL using CDN
   const getImageUrl = (img) => {
     if (!img) return '';
-    return img.filePath?.startsWith('http')
-      ? img.filePath
-      : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${img.filePath}`;
+    return getCdnUrl(img.filePath);
   };
 
   const currentImageUrl = getImageUrl(currentImage);

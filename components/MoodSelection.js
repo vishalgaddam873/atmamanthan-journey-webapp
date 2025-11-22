@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import getCdnUrl from '../lib/cdnUtils';
 
 const MoodSelection = ({ socket, onMoodSelected }) => {
   const [selected, setSelected] = useState(null);
@@ -46,12 +47,12 @@ const MoodSelection = ({ socket, onMoodSelected }) => {
   };
 
   const emotionImages = {
-    ANXIETY: '/assets/Emotions/Anxiety.png',
-    ANGRY: '/assets/Emotions/Anger.png',
-    SAD: '/assets/Emotions/Sad.png',
-    CONFUSED: '/assets/Emotions/Confused.png',
-    LOVE: '/assets/Emotions/Love.png',
-    HAPPY: '/assets/Emotions/Happy.png',
+    ANXIETY: getCdnUrl('/assets/Emotions/Anxiety.png'),
+    ANGRY: getCdnUrl('/assets/Emotions/Anger.png'),
+    SAD: getCdnUrl('/assets/Emotions/Sad.png'),
+    CONFUSED: getCdnUrl('/assets/Emotions/Confused.png'),
+    LOVE: getCdnUrl('/assets/Emotions/Love.png'),
+    HAPPY: getCdnUrl('/assets/Emotions/Happy.png'),
   };
 
   const moods = [

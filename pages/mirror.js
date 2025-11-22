@@ -163,11 +163,10 @@ const MirrorScreen = () => {
   useEffect(() => {
     if (!socket || !session) return;
 
-    // Handle audio events
-    socket.on('audio_play', async ({ audioPath, audioId }) => {
+    // Handle audio visual updates (frontend-controlled, emitted by table.js)
+    socket.on('audio_visual_update', async ({ audioPath, audioId }) => {
       dispatch(setCurrentAudio(audioPath));
-      // Trigger play event
-      window.dispatchEvent(new Event('audio:play'));
+      // Note: Audio playback is controlled by table.js, mirror screen only handles visuals
       
       // Handle Positive Flow specifically
       if (session?.category === 'POSITIVE' && audioId) {
@@ -594,7 +593,8 @@ const MirrorScreen = () => {
             if (audio3) {
               console.log('Playing audio 3:', audio3.fileName);
               if (socket) {
-                socket.emit('audio_play', {
+                // Request table screen to play audio (frontend-controlled)
+                socket.emit('request_audio_play', {
                   audioPath: audio3.filePath,
                   audioId: audio3._id
                 });
@@ -648,7 +648,8 @@ const MirrorScreen = () => {
             if (audio2) {
               console.log('Playing audio 2:', audio2.fileName);
               if (socket) {
-                socket.emit('audio_play', {
+                // Request table screen to play audio (frontend-controlled)
+                socket.emit('request_audio_play', {
                   audioPath: audio2.filePath,
                   audioId: audio2._id
                 });
@@ -701,7 +702,8 @@ const MirrorScreen = () => {
             if (audio2) {
               console.log('Playing audio 2:', audio2.fileName);
               if (socket) {
-                socket.emit('audio_play', {
+                // Request table screen to play audio (frontend-controlled)
+                socket.emit('request_audio_play', {
                   audioPath: audio2.filePath,
                   audioId: audio2._id
                 });
@@ -754,7 +756,8 @@ const MirrorScreen = () => {
             if (audio3) {
               console.log('Playing audio 3:', audio3.fileName);
               if (socket) {
-                socket.emit('audio_play', {
+                // Request table screen to play audio (frontend-controlled)
+                socket.emit('request_audio_play', {
                   audioPath: audio3.filePath,
                   audioId: audio3._id
                 });
@@ -947,7 +950,7 @@ const MirrorScreen = () => {
     });
 
     return () => {
-      socket.off('audio_play');
+      socket.off('audio_visual_update');
       socket.off('audio_pause');
       socket.off('audio_stop');
       socket.off('cue_trigger');
