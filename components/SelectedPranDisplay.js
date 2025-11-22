@@ -18,13 +18,26 @@ const SelectedPranDisplay = ({ pranLabel, category }) => {
 
     const lottieInstance = lottieRef.current;
     
-    // Manual loop handler - restart when animation completes
+    // Ensure loop is enabled
+    if (lottieInstance.setLoop) {
+      lottieInstance.setLoop(true);
+    }
+    
+    // Ensure animation is playing
+    if (!lottieInstance.isPlaying) {
+      lottieInstance.play();
+    }
+    
+    // Manual loop handler - restart when animation completes (backup)
     const handleComplete = () => {
       if (lottieInstance) {
         // Immediately restart from the beginning
         setTimeout(() => {
           if (lottieInstance) {
             lottieInstance.goToAndPlay(0, true);
+            if (lottieInstance.setLoop) {
+              lottieInstance.setLoop(true);
+            }
           }
         }, 10);
       }
@@ -40,11 +53,14 @@ const SelectedPranDisplay = ({ pranLabel, category }) => {
           // If animation is paused or stopped, restart it
           if (lottieInstance.isPaused || !lottieInstance.isPlaying) {
             lottieInstance.play();
+            if (lottieInstance.setLoop) {
+              lottieInstance.setLoop(true);
+            }
           }
           
-          // If we're at or very close to the end (within last 5 frames), restart from beginning
-          if (totalFrames > 0 && currentFrame >= totalFrames - 5) {
-            lottieInstance.goToAndPlay(0, true);
+          // Ensure loop is always enabled
+          if (lottieInstance.setLoop) {
+            lottieInstance.setLoop(true);
           }
         } catch (error) {
           console.error('Error ensuring loop:', error);
@@ -52,8 +68,8 @@ const SelectedPranDisplay = ({ pranLabel, category }) => {
       }
     };
 
-    // Check very frequently (every 50ms) to catch the end of animation early
-    const interval = setInterval(ensureLooping, 50);
+    // Check frequently (every 100ms) to ensure animation keeps playing
+    const interval = setInterval(ensureLooping, 100);
 
     // Also listen for animation events if available
     if (lottieInstance && typeof lottieInstance.addEventListener === 'function') {
@@ -156,6 +172,24 @@ const SelectedPranDisplay = ({ pranLabel, category }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+      {/* Colorful vibrant gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-500 via-rose-500 via-orange-500 to-yellow-500" style={{ zIndex: 0 }} />
+      <div className="absolute inset-0 bg-gradient-to-tr from-cyan-500/60 via-blue-500/50 via-indigo-500/50 to-purple-500/60" style={{ zIndex: 0 }} />
+      <div className="absolute inset-0 bg-gradient-to-bl from-emerald-500/40 via-teal-500/40 via-cyan-500/40 to-blue-500/40" style={{ zIndex: 0 }} />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-pink-400/50 via-transparent to-transparent" style={{ zIndex: 0 }} />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-yellow-400/50 via-transparent to-transparent" style={{ zIndex: 0 }} />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-cyan-400/50 via-transparent to-transparent" style={{ zIndex: 0 }} />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-purple-400/50 via-transparent to-transparent" style={{ zIndex: 0 }} />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent" style={{ zIndex: 0 }} />
+      
+      {/* Animated colorful overlay for extra vibrancy */}
+      <div className="absolute inset-0 opacity-30" style={{ zIndex: 0 }}>
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-pink-400/40 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-cyan-400/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        <div className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-yellow-400/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
+        <div className="absolute bottom-0 right-1/3 w-96 h-96 bg-purple-400/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '0.5s' }} />
+      </div>
+
       {/* Lottie Animation - Full screen background decoration */}
       {lottieData && (
         <div 
@@ -169,18 +203,23 @@ const SelectedPranDisplay = ({ pranLabel, category }) => {
           <Lottie
             lottieRef={(instance) => {
               lottieRef.current = instance;
-              // Ensure it starts playing immediately
+              // Ensure it starts playing immediately with loop enabled
               if (instance) {
-                // Don't rely on loop prop - we'll handle it manually
-                instance.setLoop(false); // Disable automatic loop
+                // Enable native loop
+                if (instance.setLoop) {
+                  instance.setLoop(true);
+                }
                 // Start playing from the beginning
                 instance.goToAndPlay(0, true);
                 
-                // Set up manual loop handler
+                // Set up manual loop handler as backup
                 const handleComplete = () => {
                   if (instance) {
                     // Immediately restart
                     instance.goToAndPlay(0, true);
+                    if (instance.setLoop) {
+                      instance.setLoop(true);
+                    }
                   }
                 };
                 
@@ -191,12 +230,15 @@ const SelectedPranDisplay = ({ pranLabel, category }) => {
               }
             }}
             animationData={lottieData}
-            loop={false}
+            loop={true}
             autoplay={true}
             onComplete={() => {
-              // Manual restart when animation completes
+              // Backup restart when animation completes (shouldn't be needed with loop=true, but just in case)
               if (lottieRef.current) {
                 lottieRef.current.goToAndPlay(0, true);
+                if (lottieRef.current.setLoop) {
+                  lottieRef.current.setLoop(true);
+                }
               }
             }}
             style={{
@@ -223,10 +265,16 @@ const SelectedPranDisplay = ({ pranLabel, category }) => {
         }}
       />
 
-      {/* Main pran display card */}
+      {/* Main pran display card - centered */}
       <div 
         className={`relative transition-all duration-1000 ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
-        style={{ zIndex: 10 }}
+        style={{ 
+          zIndex: 10,
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+        }}
       >
         {/* Outer glow */}
         <div

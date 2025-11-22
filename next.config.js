@@ -4,6 +4,9 @@ const nextConfig = {
   images: {
     unoptimized: true, // For local development
   },
+  env: {
+    NEXT_PUBLIC_CDN_URL: process.env.NEXT_PUBLIC_CDN_URL || 'https://d1igx7lccgvz7g.cloudfront.net',
+  },
   async rewrites() {
     return [
       {
