@@ -708,11 +708,16 @@ const TableScreen = () => {
   const renderPhase = () => {
     // Only show mood selection and pran selection screens
     // All other phases show blank black screen
+    // If pran is selected, hide PranSelection and only show SelectedPranDisplay
     switch (currentPhase) {
       case 'MOOD_SELECTION':
         return <MoodSelection socket={socket} />;
       
       case 'PRAN_SELECTION':
+        // If pran is already selected, don't show selection buttons
+        if (pran || selectedPranLabel) {
+          return <div className="w-screen h-screen bg-black" />;
+        }
         return session?.category ? (
           <PranSelection socket={socket} category={session.category} />
         ) : (
@@ -720,6 +725,10 @@ const TableScreen = () => {
         );
       
       case 'CATEGORY_FLOW':
+        // If pran is already selected, don't show selection buttons
+        if (pran || selectedPranLabel) {
+          return <div className="w-screen h-screen bg-black" />;
+        }
         // Show pran selection if cue triggered, otherwise black screen
         if (showPranSelection && session?.category) {
           return <PranSelection socket={socket} category={session.category} />;
@@ -727,9 +736,9 @@ const TableScreen = () => {
         return <div className="w-screen h-screen bg-black" />;
       
       case 'ENDING':
-        // If pran is selected, keep showing pran selection screen
-        if (pran && session?.category) {
-          return <PranSelection socket={socket} category={session.category} />;
+        // If pran is selected, don't show selection buttons - only SelectedPranDisplay will show
+        if (pran || selectedPranLabel) {
+          return <div className="w-screen h-screen bg-black" />;
         }
         return <div className="w-screen h-screen bg-black" />;
       
