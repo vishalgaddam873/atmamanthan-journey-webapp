@@ -1,11 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import getAudioCoordinator from '../lib/audioCoordinator';
+import getAudioPermissionManager from '../lib/audioPermissions';
 
 const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false }) => {
   const audioRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [canPlay, setCanPlay] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const coordinator = getAudioCoordinator();
+  const permissionManager = getAudioPermissionManager();
+
+  // Check audio permissions
+  useEffect(() => {
+    setAudioUnlocked(permissionManager.isUnlocked());
+    
+    const unsubscribe = permissionManager.onUnlock((unlocked) => {
+      setAudioUnlocked(unlocked);
+      if (unlocked) {
+        console.log('AudioPlayer: Audio permissions unlocked');
+      }
+    });
+    
+    return unsubscribe;
+  }, [permissionManager]);
 
   // Check if this tab should play audio
   useEffect(() => {
@@ -40,21 +57,34 @@ const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false })
     audio.src = encodedPath;
     audio.load(); // Reload the audio element with new source
     
-    if (autoPlay && canPlay) {
-      // Auto-play when new audio is set, but only if this tab can play
+    if (autoPlay && canPlay && audioUnlocked) {
+      // Auto-play when new audio is set, but only if this tab can play and audio is unlocked
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch(err => {
           console.error('Error playing audio:', err);
-          // Some browsers require user interaction before autoplay
-          console.log('Note: Autoplay blocked. User interaction required.');
+          // Try to unlock audio permissions if play failed
+          if (err.name === 'NotAllowedError' || err.name === 'NotSupportedError') {
+            console.log('Audio autoplay blocked. Attempting to unlock permissions...');
+            permissionManager.forceUnlock();
+            // Retry after a short delay
+            setTimeout(() => {
+              audio.play().catch(retryErr => {
+                console.error('Retry play failed:', retryErr);
+                console.log('Note: User interaction may be required for audio playback.');
+              });
+            }, 100);
+          }
         });
       }
     } else if (!canPlay) {
       // Pause audio if this tab is not the master
       audio.pause();
+    } else if (!audioUnlocked) {
+      // Wait for audio to be unlocked
+      console.log('AudioPlayer: Waiting for audio permissions to be unlocked...');
     }
-  }, [audioPath, autoPlay, canPlay]);
+  }, [audioPath, autoPlay, canPlay, audioUnlocked, permissionManager]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -91,11 +121,21 @@ const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false })
     if (!audio) return;
 
     const handlePlayEvent = () => {
-      // Only play if this tab is the audio master
-      if (canPlay || forcePlay) {
-        audio.play().catch(err => console.error('Play error:', err));
+      // Only play if this tab is the audio master and audio is unlocked
+      if ((canPlay || forcePlay) && audioUnlocked) {
+        audio.play().catch(err => {
+          console.error('Play error:', err);
+          // Try to unlock if needed
+          if (err.name === 'NotAllowedError' || err.name === 'NotSupportedError') {
+            permissionManager.forceUnlock();
+          }
+        });
       } else {
-        console.log('AudioPlayer: Ignoring play event - not audio master');
+        if (!audioUnlocked) {
+          console.log('AudioPlayer: Ignoring play event - audio not unlocked yet');
+        } else {
+          console.log('AudioPlayer: Ignoring play event - not audio master');
+        }
       }
     };
 
@@ -118,7 +158,7 @@ const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false })
       window.removeEventListener('audio:pause', handlePauseEvent);
       window.removeEventListener('audio:stop', handleStopEvent);
     };
-  }, [canPlay, forcePlay]);
+  }, [canPlay, forcePlay, audioUnlocked, permissionManager]);
 
   return (
     <audio
