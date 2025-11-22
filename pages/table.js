@@ -3,10 +3,12 @@ import { useSocket } from '../hooks/useSocket';
 import MoodSelection from '../components/MoodSelection';
 import PranSelection from '../components/PranSelection';
 import AudioPlayer from '../components/AudioPlayer';
+import AudioPermissionPrompt from '../components/AudioPermissionPrompt';
 import CelebrationAnimation from '../components/CelebrationAnimation';
 import SelectedPranDisplay from '../components/SelectedPranDisplay';
 import api from '../lib/api';
 import getAudioCoordinator from '../lib/audioCoordinator';
+import { validateMp3Url } from '../lib/audioUtils';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   setCurrentPhase,
@@ -49,6 +51,9 @@ const TableScreen = () => {
   // Selected pran display state
   const [selectedPranLabel, setSelectedPranLabel] = useState(null);
   
+  // Audio permission state
+  const [audioPermissionGranted, setAudioPermissionGranted] = useState(false);
+  
   // Background audio state
   const [backgroundAudioPath, setBackgroundAudioPath] = useState(null); // bg1
   const backgroundAudioRef = useRef(null);
@@ -58,9 +63,10 @@ const TableScreen = () => {
   // Handle background audio playback (bg1)
   useEffect(() => {
     const audio = backgroundAudioRef.current;
-    if (!audio || !backgroundAudioPath || pran) {
+    // Don't play if permission not granted, no path, or pran selected
+    if (!audio || !backgroundAudioPath || pran || !audioPermissionGranted) {
       // Stop audio if pran is selected or path is cleared
-      if (audio && (pran || !backgroundAudioPath)) {
+      if (audio && (pran || !backgroundAudioPath || !audioPermissionGranted)) {
         audio.pause();
         audio.currentTime = 0;
       }
@@ -69,25 +75,63 @@ const TableScreen = () => {
     
     const playBackgroundAudio = async () => {
       try {
+        // Check if audio has an error before trying to play
+        if (audio.error) {
+          console.error('❌ Audio has error before play attempt:', {
+            code: audio.error.code,
+            message: audio.error.message
+          });
+          return;
+        }
+        
         // Set volume to 50% so it's audible but doesn't overpower main audio
         audio.volume = 0.5;
         
-        // Wait for audio to be ready
+        // Wait for audio to be ready (readyState 2 = HAVE_CURRENT_DATA, 4 = HAVE_ENOUGH_DATA)
         if (audio.readyState < 2) {
           await new Promise((resolve, reject) => {
-            audio.addEventListener('canplay', resolve, { once: true });
-            audio.addEventListener('error', reject, { once: true });
-            // Timeout after 5 seconds
-            setTimeout(() => reject(new Error('Audio load timeout')), 5000);
+            const timeout = setTimeout(() => {
+              reject(new Error('Audio load timeout'));
+            }, 10000); // Increased timeout to 10 seconds
+            
+            const handleCanPlay = () => {
+              clearTimeout(timeout);
+              audio.removeEventListener('error', handleError);
+              resolve();
+            };
+            
+            const handleError = (e) => {
+              clearTimeout(timeout);
+              audio.removeEventListener('canplay', handleCanPlay);
+              reject(e);
+            };
+            
+            audio.addEventListener('canplay', handleCanPlay, { once: true });
+            audio.addEventListener('error', handleError, { once: true });
           });
         }
         
+        // Check again for errors after loading
+        if (audio.error) {
+          console.error('❌ Audio error after loading:', {
+            code: audio.error.code,
+            message: audio.error.message,
+            src: audio.src
+          });
+          return;
+        }
+        
         await audio.play();
-        console.log('Background audio (bg1) playing in loop at volume:', audio.volume);
+        console.log('✅ Background audio (bg1) playing in loop at volume:', audio.volume);
       } catch (error) {
-        console.error('Error playing background audio:', error);
+        console.error('❌ Error playing background audio:', error);
         console.error('Audio src:', audio.src);
         console.error('Audio readyState:', audio.readyState);
+        console.error('Audio networkState:', audio.networkState);
+        if (audio.error) {
+          console.error('Audio error code:', audio.error.code);
+          console.error('Audio error message:', audio.error.message);
+        }
       }
     };
     
@@ -101,10 +145,25 @@ const TableScreen = () => {
     };
     
     const handleError = (e) => {
+      // Guard against empty src errors
+      if (!audio.src || audio.src === window.location.href || audio.src === '') {
+        console.warn('Background audio (bg1): Ignoring error with empty/invalid src');
+        return;
+      }
+
       console.error('Background audio (bg1) error:', e);
       console.error('Audio src:', audio.src);
       console.error('Audio error code:', audio.error?.code);
       console.error('Audio error message:', audio.error?.message);
+      
+      // Check for format/CORS errors
+      if (audio.error?.code === 4) {
+        console.error('❌ Format error - Possible causes:');
+        console.error('   1. CORS headers not configured on CloudFront');
+        console.error('   2. Content-Type header not set correctly');
+        console.error('   3. File may not be accessible at:', audio.src);
+        console.error('   Check CloudFront CORS configuration (see CLOUDFRONT_CORS_SETUP.md)');
+      }
     };
     
     audio.addEventListener('canplay', handleCanPlay);
@@ -118,14 +177,15 @@ const TableScreen = () => {
       audio.removeEventListener('loadeddata', handleLoadedData);
       audio.removeEventListener('error', handleError);
     };
-  }, [backgroundAudioPath, pran]);
+  }, [backgroundAudioPath, pran, audioPermissionGranted]);
   
   // Handle bg2 audio playback (after pran selection)
   useEffect(() => {
     const audio = bg2AudioRef.current;
-    if (!audio || !bg2AudioPath || !pran) {
+    // Don't play if permission not granted, no path, or pran not selected
+    if (!audio || !bg2AudioPath || !pran || !audioPermissionGranted) {
       // Stop audio if pran is not selected or path is cleared
-      if (audio && (!pran || !bg2AudioPath)) {
+      if (audio && (!pran || !bg2AudioPath || !audioPermissionGranted)) {
         audio.pause();
         audio.currentTime = 0;
       }
@@ -134,25 +194,63 @@ const TableScreen = () => {
     
     const playBg2Audio = async () => {
       try {
+        // Check if audio has an error before trying to play
+        if (audio.error) {
+          console.error('❌ Audio has error before play attempt:', {
+            code: audio.error.code,
+            message: audio.error.message
+          });
+          return;
+        }
+        
         // Set volume to 50% so it's audible but doesn't overpower main audio
         audio.volume = 0.5;
         
-        // Wait for audio to be ready
+        // Wait for audio to be ready (readyState 2 = HAVE_CURRENT_DATA, 4 = HAVE_ENOUGH_DATA)
         if (audio.readyState < 2) {
           await new Promise((resolve, reject) => {
-            audio.addEventListener('canplay', resolve, { once: true });
-            audio.addEventListener('error', reject, { once: true });
-            // Timeout after 5 seconds
-            setTimeout(() => reject(new Error('Audio load timeout')), 5000);
+            const timeout = setTimeout(() => {
+              reject(new Error('Audio load timeout'));
+            }, 10000); // Increased timeout to 10 seconds
+            
+            const handleCanPlay = () => {
+              clearTimeout(timeout);
+              audio.removeEventListener('error', handleError);
+              resolve();
+            };
+            
+            const handleError = (e) => {
+              clearTimeout(timeout);
+              audio.removeEventListener('canplay', handleCanPlay);
+              reject(e);
+            };
+            
+            audio.addEventListener('canplay', handleCanPlay, { once: true });
+            audio.addEventListener('error', handleError, { once: true });
           });
         }
         
+        // Check again for errors after loading
+        if (audio.error) {
+          console.error('❌ Audio error after loading:', {
+            code: audio.error.code,
+            message: audio.error.message,
+            src: audio.src
+          });
+          return;
+        }
+        
         await audio.play();
-        console.log('Background audio (bg2) playing in loop at volume:', audio.volume);
+        console.log('✅ Background audio (bg2) playing in loop at volume:', audio.volume);
       } catch (error) {
-        console.error('Error playing bg2 audio:', error);
+        console.error('❌ Error playing bg2 audio:', error);
         console.error('Audio src:', audio.src);
         console.error('Audio readyState:', audio.readyState);
+        console.error('Audio networkState:', audio.networkState);
+        if (audio.error) {
+          console.error('Audio error code:', audio.error.code);
+          console.error('Audio error message:', audio.error.message);
+        }
       }
     };
     
@@ -166,10 +264,25 @@ const TableScreen = () => {
     };
     
     const handleError = (e) => {
+      // Guard against empty src errors
+      if (!audio.src || audio.src === window.location.href || audio.src === '') {
+        console.warn('Background audio (bg2): Ignoring error with empty/invalid src');
+        return;
+      }
+
       console.error('Background audio (bg2) error:', e);
       console.error('Audio src:', audio.src);
       console.error('Audio error code:', audio.error?.code);
       console.error('Audio error message:', audio.error?.message);
+      
+      // Check for format/CORS errors
+      if (audio.error?.code === 4) {
+        console.error('❌ Format error - Possible causes:');
+        console.error('   1. CORS headers not configured on CloudFront');
+        console.error('   2. Content-Type header not set correctly');
+        console.error('   3. File may not be accessible at:', audio.src);
+        console.error('   Check CloudFront CORS configuration (see CLOUDFRONT_CORS_SETUP.md)');
+      }
     };
     
     audio.addEventListener('canplay', handleCanPlay);
@@ -183,13 +296,20 @@ const TableScreen = () => {
       audio.removeEventListener('loadeddata', handleLoadedData);
       audio.removeEventListener('error', handleError);
     };
-  }, [bg2AudioPath, pran]);
+  }, [bg2AudioPath, pran, audioPermissionGranted]);
   
   // Table screen is always the audio master
   useEffect(() => {
     const coordinator = getAudioCoordinator();
     coordinator.forceMaster();
     console.log('TableScreen: Forced this tab to be audio master');
+    
+    // Clear sessionStorage to force fresh permission check
+    // This ensures browser requires new user interaction for autoplay
+    if (typeof window !== 'undefined' && sessionStorage.getItem('audio_unlocked')) {
+      console.log('Clearing audio_unlocked from sessionStorage to force fresh permission check');
+      sessionStorage.removeItem('audio_unlocked');
+    }
     
     return () => {
       // Don't release on unmount, let it handle naturally
@@ -403,14 +523,31 @@ const TableScreen = () => {
         
         if (bg2Audio) {
           console.log('Found bg2 audio:', bg2Audio);
-          console.log('Starting background audio (bg2):', bg2Audio.fileName, 'at path:', bg2Audio.filePath);
-          setBg2AudioPath(bg2Audio.filePath);
+          // Validate URL before setting
+          const audioUrl = bg2Audio.filePath.startsWith('http://') || bg2Audio.filePath.startsWith('https://')
+            ? bg2Audio.filePath
+            : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${bg2Audio.filePath}`;
+          
+          try {
+            new URL(audioUrl); // This will throw if URL is invalid
+            console.log('✅ Valid bg2 audio URL:', audioUrl);
+            console.log('Starting background audio (bg2):', bg2Audio.fileName, 'at path:', bg2Audio.filePath);
+            setBg2AudioPath(bg2Audio.filePath);
+          } catch (err) {
+            console.error('❌ Invalid bg2 audio URL:', audioUrl, err);
+          }
         } else {
           console.warn('bg2.mp3 not found in COMMON audio files. Available files:', response.data.map(a => a.fileName));
           // Fallback: try to use the direct path if bg2 exists in the Common folder
           const fallbackPath = '/assets/Audio/Common/bg2.mp3';
+          const fallbackUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${fallbackPath}`;
           console.log('Attempting fallback path for bg2:', fallbackPath);
-          setBg2AudioPath(fallbackPath);
+          try {
+            new URL(fallbackUrl);
+            setBg2AudioPath(fallbackPath);
+          } catch (err) {
+            console.error('❌ Invalid fallback bg2 URL:', fallbackUrl, err);
+          }
         }
       } catch (error) {
         console.error('Error loading bg2 audio:', error);
@@ -482,16 +619,33 @@ const TableScreen = () => {
           console.log('bg1 filePath:', bg1Audio.filePath);
           console.log('bg1 fileName:', bg1Audio.fileName);
           if (!pran) {
-            console.log('Starting background audio (bg1):', bg1Audio.fileName, 'at path:', bg1Audio.filePath);
-            setBackgroundAudioPath(bg1Audio.filePath);
+            // Validate URL before setting
+            const audioUrl = bg1Audio.filePath.startsWith('http://') || bg1Audio.filePath.startsWith('https://')
+              ? bg1Audio.filePath
+              : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${bg1Audio.filePath}`;
+            
+            try {
+              new URL(audioUrl); // This will throw if URL is invalid
+              console.log('✅ Valid bg1 audio URL:', audioUrl);
+              console.log('Starting background audio (bg1):', bg1Audio.fileName, 'at path:', bg1Audio.filePath);
+              setBackgroundAudioPath(bg1Audio.filePath);
+            } catch (err) {
+              console.error('❌ Invalid bg1 audio URL:', audioUrl, err);
+            }
           }
         } else {
           console.warn('bg1.mp3 not found in COMMON audio files. Available files:', response.data.map(a => a.fileName));
           // Fallback: try to use the direct path if bg1 exists in the Common folder
           const fallbackPath = '/assets/Audio/Common/bg1.mp3';
+          const fallbackUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${fallbackPath}`;
           console.log('Attempting fallback path for bg1:', fallbackPath);
-          if (!pran) {
-            setBackgroundAudioPath(fallbackPath);
+          try {
+            new URL(fallbackUrl);
+            if (!pran) {
+              setBackgroundAudioPath(fallbackPath);
+            }
+          } catch (err) {
+            console.error('❌ Invalid fallback bg1 URL:', fallbackUrl, err);
           }
         }
         
@@ -750,6 +904,15 @@ const TableScreen = () => {
 
   return (
     <div className="min-h-screen bg-black">
+      {/* Audio Permission Prompt - Show first, block everything until granted */}
+      {!audioPermissionGranted && (
+        <AudioPermissionPrompt
+          onPermissionGranted={() => {
+            console.log('✅ Audio permission granted - enabling audio playback');
+            setAudioPermissionGranted(true);
+          }}
+        />
+      )}
       {renderPhase()}
       {showCelebration && (
         <CelebrationAnimation
@@ -765,7 +928,7 @@ const TableScreen = () => {
           category={session.category}
         />
       )}
-      {currentAudio && (
+      {audioPermissionGranted && currentAudio && (
         <AudioPlayer
           audioPath={currentAudio}
           onEnded={handleAudioEnd}
@@ -773,10 +936,12 @@ const TableScreen = () => {
         />
       )}
       {/* Background audio (bg1) - plays in loop until pran is selected */}
-      {backgroundAudioPath && (
+      {audioPermissionGranted && backgroundAudioPath && (
         <audio
           ref={backgroundAudioRef}
-          src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${encodeURI(backgroundAudioPath)}`}
+          src={backgroundAudioPath.startsWith('http://') || backgroundAudioPath.startsWith('https://') 
+            ? backgroundAudioPath 
+            : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${encodeURI(backgroundAudioPath)}`}
           loop
           preload="auto"
           style={{ display: 'none' }}
@@ -798,10 +963,12 @@ const TableScreen = () => {
         />
       )}
       {/* Background audio (bg2) - plays in loop after pran is selected */}
-      {bg2AudioPath && pran && (
+      {audioPermissionGranted && bg2AudioPath && pran && (
         <audio
           ref={bg2AudioRef}
-          src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${encodeURI(bg2AudioPath)}`}
+          src={bg2AudioPath.startsWith('http://') || bg2AudioPath.startsWith('https://') 
+            ? bg2AudioPath 
+            : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${encodeURI(bg2AudioPath)}`}
           loop
           preload="auto"
           style={{ display: 'none' }}

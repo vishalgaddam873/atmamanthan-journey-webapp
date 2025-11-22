@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import getAudioCoordinator from '../lib/audioCoordinator';
 import getAudioPermissionManager from '../lib/audioPermissions';
+import { resolveAudioUrl, validateMp3Url, logAudioError } from '../lib/audioUtils';
 
 const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false }) => {
   const audioRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [canPlay, setCanPlay] = useState(false);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const coordinator = getAudioCoordinator();
   const permissionManager = getAudioPermissionManager();
 
@@ -45,46 +47,93 @@ const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false })
   // Update audio source when audioPath changes
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !audioPath) return;
-
-    // Construct full URL if path doesn't start with http
-    // Encode the path properly for URLs (handles spaces)
-    const encodedPath = audioPath.startsWith('http') 
-      ? audioPath 
-      : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001'}${encodeURI(audioPath)}`;
-
-    console.log('Loading audio:', encodedPath);
-    audio.src = encodedPath;
-    audio.load(); // Reload the audio element with new source
-    
-    if (autoPlay && canPlay && audioUnlocked) {
-      // Auto-play when new audio is set, but only if this tab can play and audio is unlocked
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(err => {
-          console.error('Error playing audio:', err);
-          // Try to unlock audio permissions if play failed
-          if (err.name === 'NotAllowedError' || err.name === 'NotSupportedError') {
-            console.log('Audio autoplay blocked. Attempting to unlock permissions...');
-            permissionManager.forceUnlock();
-            // Retry after a short delay
-            setTimeout(() => {
-              audio.play().catch(retryErr => {
-                console.error('Retry play failed:', retryErr);
-                console.log('Note: User interaction may be required for audio playback.');
-              });
-            }, 100);
-          }
-        });
+    if (!audio || !audioPath) {
+      // Clear src if no audioPath to prevent empty-src errors
+      if (audio && audio.src) {
+        audio.src = '';
       }
-    } else if (!canPlay) {
-      // Pause audio if this tab is not the master
-      audio.pause();
-    } else if (!audioUnlocked) {
-      // Wait for audio to be unlocked
-      console.log('AudioPlayer: Waiting for audio permissions to be unlocked...');
+      return;
     }
-  }, [audioPath, autoPlay, canPlay, audioUnlocked, permissionManager]);
+
+    // Don't load audio until permission is granted
+    if (!audioUnlocked) {
+      console.log('AudioPlayer: Waiting for audio permissions to be unlocked...');
+      return;
+    }
+
+    // Validate and load audio
+    const loadAudio = async () => {
+      try {
+        // Construct full URL
+        const encodedPath = resolveAudioUrl(audioPath);
+        
+        if (!encodedPath) {
+          console.error('AudioPlayer: Invalid audio path');
+          return;
+        }
+
+        // Validate URL exists before loading
+        setIsValidating(true);
+        console.log(`AudioPlayer: Validating MP3 URL: ${encodedPath}`);
+        
+        const validation = await validateMp3Url(encodedPath);
+        setIsValidating(false);
+
+        // Only block on definitive errors (404, 403)
+        // Allow loading if CORS blocked validation (audio element may still work)
+        if (!validation.valid && validation.status === 404) {
+          console.error(`❌ AudioPlayer: File not found (404): ${encodedPath}`);
+          console.error(`   Please verify the exact filename matches what's on the server`);
+          return; // Don't load 404 URLs
+        }
+
+        if (!validation.valid && validation.status === 403) {
+          console.error(`❌ AudioPlayer: Access denied (403): ${encodedPath}`);
+          console.error(`   Check CloudFront permissions and CORS configuration`);
+          return; // Don't load 403 URLs
+        }
+
+        // For CORS errors or other issues, still try to load
+        // The audio element might work even if HEAD request was blocked
+        if (validation.corsBlocked || validation.validationError) {
+          console.log(`⚠️ AudioPlayer: Validation had issues, but attempting to load: ${encodedPath}`);
+        } else {
+          console.log(`✅ AudioPlayer: URL validated, loading audio: ${encodedPath}`);
+        }
+        audio.src = encodedPath;
+        audio.load(); // Reload the audio element with new source
+        
+        // Wait for audio to be ready before attempting to play
+        if (autoPlay && canPlay) {
+          // Wait for canplay event
+          const handleCanPlay = () => {
+            audio.removeEventListener('error', handleError);
+            audio.play().catch(err => {
+              if (err.name === 'NotAllowedError') {
+                console.error('❌ AudioPlayer: NotAllowedError - audio not unlocked properly');
+                console.error('   User interaction may be required');
+              } else {
+                console.error('❌ AudioPlayer: Error playing audio:', err);
+              }
+            });
+          };
+
+          const handleError = (e) => {
+            audio.removeEventListener('canplay', handleCanPlay);
+            logAudioError(audio, 'AudioPlayer');
+          };
+
+          audio.addEventListener('canplay', handleCanPlay, { once: true });
+          audio.addEventListener('error', handleError, { once: true });
+        }
+      } catch (error) {
+        setIsValidating(false);
+        console.error('❌ AudioPlayer: Error loading audio:', error);
+      }
+    };
+
+    loadAudio();
+  }, [audioPath, autoPlay, canPlay, audioUnlocked]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -98,7 +147,13 @@ const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false })
     };
 
     const handleError = (e) => {
-      console.error('Audio error:', e);
+      // Guard against empty src errors
+      if (!audio.src || audio.src === window.location.href || audio.src === '') {
+        console.warn('AudioPlayer: Ignoring error with empty/invalid src');
+        return;
+      }
+
+      logAudioError(audio, 'AudioPlayer');
       setIsPlaying(false);
     };
 
@@ -123,11 +178,16 @@ const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false })
     const handlePlayEvent = () => {
       // Only play if this tab is the audio master and audio is unlocked
       if ((canPlay || forcePlay) && audioUnlocked) {
+        // Only play if src is set and valid
+        if (!audio.src || audio.src === window.location.href || audio.src === '') {
+          console.warn('AudioPlayer: Ignoring play event - no valid src');
+          return;
+        }
+        
         audio.play().catch(err => {
-          console.error('Play error:', err);
-          // Try to unlock if needed
-          if (err.name === 'NotAllowedError' || err.name === 'NotSupportedError') {
-            permissionManager.forceUnlock();
+          console.error('❌ AudioPlayer: Play error:', err);
+          if (err.name === 'NotAllowedError') {
+            console.error('   Audio not unlocked properly - user interaction required');
           }
         });
       } else {
@@ -158,7 +218,7 @@ const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false })
       window.removeEventListener('audio:pause', handlePauseEvent);
       window.removeEventListener('audio:stop', handleStopEvent);
     };
-  }, [canPlay, forcePlay, audioUnlocked, permissionManager]);
+  }, [canPlay, forcePlay, audioUnlocked]);
 
   return (
     <audio
@@ -171,4 +231,3 @@ const AudioPlayer = ({ audioPath, onEnded, autoPlay = true, forcePlay = false })
 };
 
 export default AudioPlayer;
-
