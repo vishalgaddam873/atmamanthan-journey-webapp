@@ -1,0 +1,401 @@
+.admin-dashboard {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f5f5;
+}
+
+.admin-header {
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.admin-header h1 {
+  font-size: 24px;
+  color: #333;
+}
+
+.connection-status {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #fff;
+}
+
+.connection-status.connected {
+  background: #4caf50;
+}
+
+.connection-status.disconnected {
+  background: #f44336;
+}
+
+.admin-tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.tab-button {
+  padding: 15px 30px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s;
+}
+
+.tab-button:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.tab-button.active {
+  color: #4caf50;
+  border-bottom-color: #4caf50;
+  font-weight: bold;
+}
+
+.admin-content {
+  flex: 1;
+  padding: 30px;
+  overflow-y: auto;
+}
+
+.session-control {
+  max-width: 800px;
+}
+
+.control-section {
+  background: #fff;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.control-section h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #666;
+  font-weight: 500;
+}
+
+.form-group select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-right: 10px;
+  margin-bottom: 10px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #4caf50;
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.btn-secondary {
+  background: #2196f3;
+  color: #fff;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #0b7dda;
+}
+
+.btn-danger {
+  background: #f44336;
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #da190b;
+}
+
+.session-info {
+  background: #f9f9f9;
+  padding: 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.session-info p {
+  margin: 10px 0;
+  color: #333;
+}
+
+.control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.session-history {
+  max-width: 1200px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.history-header h2 {
+  color: #333;
+}
+
+.filters {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-group label {
+  font-weight: 500;
+  color: #666;
+}
+
+.filter-group select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.sessions-table {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow-x: auto;
+}
+
+.sessions-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sessions-table th,
+.sessions-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.sessions-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+  color: #333;
+}
+
+.sessions-table tr:hover {
+  background: #f9f9f9;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.status-active {
+  background: #4caf50;
+  color: #fff;
+}
+
+.status-completed {
+  background: #2196f3;
+  color: #fff;
+}
+
+.status-stopped {
+  background: #f44336;
+  color: #fff;
+}
+
+.analytics {
+  max-width: 1200px;
+}
+
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.analytics-header h2 {
+  color: #333;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  background: #fff;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.stat-card h3 {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 36px;
+  font-weight: bold;
+  color: #4caf50;
+}
+
+.analytics-section {
+  background: #fff;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.analytics-section h3 {
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.distribution-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.distribution-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.distribution-label {
+  min-width: 100px;
+  font-weight: 500;
+  color: #333;
+}
+
+.distribution-bar {
+  flex: 1;
+  height: 24px;
+  background: #e0e0e0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.distribution-fill {
+  height: 100%;
+  background: #4caf50;
+  transition: width 0.3s;
+}
+
+.distribution-count {
+  min-width: 50px;
+  text-align: right;
+  font-weight: 600;
+  color: #333;
+}
+
+.sessions-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 250px;
+  padding: 20px 0;
+}
+
+.chart-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.chart-bar-container {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.chart-bar {
+  width: 80%;
+  background: #4caf50;
+  border-radius: 4px 4px 0 0;
+  min-height: 5px;
+}
+
+.chart-label {
+  font-size: 12px;
+  color: #666;
+  transform: rotate(-45deg);
+  white-space: nowrap;
+}
+
+.chart-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
