@@ -1,0 +1,384 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Ken Burns Animation - Slow zoom and pan */
+@keyframes ken-burns {
+  0% {
+    transform: scale(1) translate(0, 0);
+  }
+  50% {
+    transform: scale(1.1) translate(-2%, -2%);
+  }
+  100% {
+    transform: scale(1.15) translate(-4%, -4%);
+  }
+}
+
+.animate-ken-burns {
+  animation: ken-burns 20s ease-in-out infinite alternate;
+}
+
+/* Shimmer effect for mirror */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%) translateY(0);
+  }
+  100% {
+    transform: translateX(200%) translateY(0);
+  }
+}
+
+/* Floating particles */
+@keyframes float {
+  0%, 100% {
+    transform: translate(-50%, -50%) translateY(0) scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translate(-50%, -50%) translateY(-20px) scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* Gentle pulse for light effects */
+@keyframes gentle-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+/* Smooth fade transitions */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Zoom animations */
+@keyframes zoom-in {
+  from {
+    transform: scale(1);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes zoom-out {
+  from {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Confetti fall animation */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* Responsive utilities for mood selection */
+@media (max-width: 640px) {
+  /* Small screens - ensure content fits */
+  .mood-grid-item {
+    min-height: 0;
+    aspect-ratio: 1;
+  }
+}
+
+/* Prevent horizontal scroll on all devices */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Ensure images render clearly and sharply */
+img {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: high-quality;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* Radial gradient utility */
+.bg-gradient-radial {
+  background: radial-gradient(circle, var(--tw-gradient-stops));
+}
+
+/* Celebration burst animation - generic */
+@keyframes celebration-burst {
+  0% {
+    transform: translate(-50%, -50%) translate(calc(var(--end-x, 0px) * 0.5), calc(var(--end-y, 0px) * 0.5)) scale(0);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--end-x, 0px), var(--end-y, 0px)) scale(1);
+    opacity: 0.7;
+  }
+}
+
+/* Enhanced celebration burst animation */
+@keyframes celebration-burst-enhanced {
+  0% {
+    transform: translate(-50%, -50%) translate(calc(var(--end-x, 0px) * 0.3), calc(var(--end-y, 0px) * 0.3)) scale(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) translate(calc(var(--end-x, 0px) * 0.5), calc(var(--end-y, 0px) * 0.5)) scale(1.2);
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--end-x, 0px), var(--end-y, 0px)) scale(0.8);
+    opacity: 0.4;
+  }
+}
+
+/* Enhanced confetti fall */
+@keyframes confetti-fall-enhanced {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(120vh) rotate(1080deg);
+    opacity: 0;
+  }
+}
+
+/* Floating orb animation */
+@keyframes float-orb {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.6;
+  }
+  25% {
+    transform: translate(20px, -30px) scale(1.1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(-15px, -50px) scale(0.9);
+    opacity: 0.7;
+  }
+  75% {
+    transform: translate(10px, -20px) scale(1.05);
+    opacity: 0.75;
+  }
+}
+
+/* Enhanced sparkle animation */
+@keyframes sparkle-enhanced {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.5) rotate(180deg);
+  }
+}
+
+/* Pulse glow for center core */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 40px #FFFFFF, 0 0 80px #FFD700;
+  }
+  50% {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1.2);
+    box-shadow: 0 0 60px #FFFFFF, 0 0 120px #FFD700, 0 0 160px #8B5CF6;
+  }
+}
+
+/* Light rain fall animation for sequence 8 */
+@keyframes light-rain-fall {
+  0% {
+    transform: translateY(-10%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.5;
+  }
+  90% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(110%);
+    opacity: 0;
+  }
+}
+
+/* Selected Pran Display Animations */
+@keyframes pran-ring-expand {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 0;
+  }
+}
+
+@keyframes pran-ripple {
+  0% {
+    width: 0px;
+    height: 0px;
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    width: 300px;
+    height: 300px;
+    opacity: 0;
+  }
+}
+
+@keyframes pran-glow-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+@keyframes pran-float-orb {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.6;
+  }
+  25% {
+    transform: translate(20px, -20px) scale(1.2);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(-10px, -30px) scale(0.9);
+    opacity: 0.5;
+  }
+  75% {
+    transform: translate(-20px, 10px) scale(1.1);
+    opacity: 0.7;
+  }
+}
+
+@keyframes pran-sparkle {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.animate-pran-ring-expand {
+  animation: pran-ring-expand 4s ease-out infinite;
+}
+
+.animate-pran-ripple {
+  animation: pran-ripple 2s ease-out infinite;
+}
+
+.animate-pran-glow-pulse {
+  animation: pran-glow-pulse 3s ease-in-out infinite;
+}
+
+.animate-pran-float-orb {
+  animation: pran-float-orb 4s ease-in-out infinite;
+}
+
+.animate-pran-sparkle {
+  animation: pran-sparkle 2s ease-in-out infinite;
+}
+
+.animate-shimmer-sweep {
+  animation: shimmer-sweep 3s ease-in-out infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
