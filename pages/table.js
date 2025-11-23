@@ -482,11 +482,23 @@ const TableScreen = () => {
       // Update queue index if this audio is in the queue (for positive flow audio 3 manual play)
       if (audioQueue.length > 0 && audioId) {
         const audioIndex = audioQueue.findIndex((a) => a._id === audioId);
-        if (audioIndex !== -1 && audioIndex !== currentQueueIndex) {
-          console.log(
-            `Updating queue index to ${audioIndex} for audio: ${audioQueue[audioIndex]?.fileName}`
+        if (audioIndex !== -1) {
+          // Always update queue index to match the audio being played
+          // This ensures proper queue continuation after manually triggered audios
+          if (audioIndex !== currentQueueIndex) {
+            console.log(
+              `Updating queue index from ${currentQueueIndex} to ${audioIndex} for audio: ${audioQueue[audioIndex]?.fileName}`
+            );
+            dispatch(setCurrentQueueIndex(audioIndex));
+          } else {
+            console.log(
+              `Queue index already correct (${audioIndex}) for audio: ${audioQueue[audioIndex]?.fileName}`
+            );
+          }
+        } else {
+          console.warn(
+            `Audio with ID ${audioId} not found in queue. Queue length: ${audioQueue.length}`
           );
-          dispatch(setCurrentQueueIndex(audioIndex));
         }
       }
 
@@ -532,15 +544,22 @@ const TableScreen = () => {
       window.dispatchEvent(new Event("audio:stop"));
     });
 
-    // Handle mood selection - reset queue so category flow can load
+    // Handle mood selection - don't reset COMMON_FLOW queue, let it continue
     socket.on("mood_selected", ({ mood, category }) => {
       console.log("Mood selected:", mood, "Category:", category);
       // Reset waiting flag - user has selected mood
       dispatch(setWaitingForMoodSelection(false));
-      // Reset queue loaded flag so category flow audios can load
-      dispatch(setQueueLoaded(false));
-      dispatch(setCurrentQueueIndex(0));
-      dispatch(resetAudioQueue());
+      
+      // Don't reset COMMON_FLOW queue - let remaining audios continue playing
+      // Only reset queue when transitioning to CATEGORY_FLOW (which happens after COMMON_FLOW completes)
+      if (currentPhase !== "COMMON_FLOW") {
+        // Reset queue loaded flag so category flow audios can load
+        dispatch(setQueueLoaded(false));
+        dispatch(setCurrentQueueIndex(0));
+        dispatch(resetAudioQueue());
+      } else {
+        console.log("COMMON_FLOW still in progress - keeping queue intact to continue playing remaining audios");
+      }
     });
 
     // Handle pran selection - keep pran selection visible
@@ -976,21 +995,16 @@ const TableScreen = () => {
     }
 
     // Special handling for audio 8 (Choosing-Emotion) in COMMON flow
+    // Note: After audio 8, the queue should continue playing remaining COMMON_FLOW audios
+    // Mood selection can happen in parallel - it doesn't need to block the queue
     if (currentPhase === "COMMON_FLOW" || currentPhase === "MOOD_SELECTION") {
       const currentAudioInQueue = audioQueue[currentQueueIndex];
       if (currentAudioInQueue && currentAudioInQueue.sequence === 8) {
         console.log(
-          "Audio 8 (Choosing-Emotion) finished. Waiting for mood selection..."
+          "Audio 8 (Choosing-Emotion) finished. Queue will continue - mood selection can happen in parallel."
         );
-        // If waiting for mood selection, don't play next audio
-        if (waitingForMoodSelection) {
-          console.log(
-            "Waiting for user to select mood - not playing next audio"
-          );
-          // Stop audio but don't clear - wait for mood selection
-          dispatch(clearCurrentAudio());
-          return; // Don't continue to next audio
-        }
+        // Don't block the queue - let it continue to next audio
+        // Mood selection UI is shown but doesn't need to block audio playback
       }
     }
 
@@ -1076,14 +1090,9 @@ const TableScreen = () => {
 
     // Play next audio in queue (continue even if phase is ENDING)
     if (currentQueueIndex < audioQueue.length - 1) {
-      // Check if we're waiting for mood selection
-      if (waitingForMoodSelection && currentPhase === "MOOD_SELECTION") {
-        console.log(
-          "Still waiting for mood selection - not playing next audio"
-        );
-        dispatch(clearCurrentAudio());
-        return; // Don't play next audio until mood is selected
-      }
+      // Note: Don't block queue continuation for mood selection
+      // COMMON_FLOW audios should continue playing even if mood selection is shown
+      // Mood selection can happen in parallel with audio playback
 
       const nextIndex = currentQueueIndex + 1;
       const nextAudio = audioQueue[nextIndex];
