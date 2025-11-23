@@ -204,7 +204,7 @@ const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = n
           key={`image-${currentIndex}`}
           src={currentImageUrl}
           alt={`${category} ${ageGroup} ${type} - ${currentIndex + 1}`}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-contain"
           style={{
             opacity: opacity,
             transform: `scale(${scale}) translateZ(0)`,

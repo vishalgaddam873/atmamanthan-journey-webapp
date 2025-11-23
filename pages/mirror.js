@@ -220,22 +220,16 @@ const MirrorScreen = () => {
               setCurrentDialogueSequence(sequence);
             }
           } else if (sequence === 6) {
-            // Audio 6: Show next 4 images (positive-kids-5 to positive-kids-8) while audio plays
-            console.log('Positive Flow: Audio 6 - Showing next 4 images');
-            dispatch(setImageType('POS-EMOTION'));
-            dispatch(setShowImages(true));
-            dispatch(setFadeIn(true));
-            setPositiveFlowState(prev => ({
-              ...prev,
-              showSecondImages: true,
-            }));
-            // Also show dialogue
+            // Audio 6: Show dialogue first, images will show after audio completes
+            console.log('Positive Flow: Audio 6 - Showing dialogue, images will show after audio completes');
+            // DO NOT show images here - only show dialogue
             const dialogue = positiveFlowDialogues[6];
             if (dialogue) {
               dispatch(setDialogueText(dialogue));
               dispatch(setShowDialogue(true));
               setCurrentDialogueSequence(6);
             }
+            // Images will be shown in audio_stop handler
           } else if (sequence === 7) {
             // Audio 7: Circular glow that brightens
             console.log('Positive Flow: Audio 7 - Showing circular glow that brightens');
@@ -315,42 +309,16 @@ const MirrorScreen = () => {
               setCurrentDialogueSequence(2);
             }
           } else if (sequence === 3) {
-            // Audio 3: Show 4 positive images with dialogues (NO ANIMATIONS)
-            console.log('✓✓✓ Neutral Flow: Audio 3 - Showing 4 positive images with dialogue (no animations) ✓✓✓');
-            console.log('  - Session category:', session?.category, '(should be NEUTRAL)');
-            console.log('  - Session ageGroup:', session?.ageGroup, '-> mapped:', mapAgeGroup(session?.ageGroup));
-            // First, hide any existing images and animations
-            dispatch(setShowImages(false));
-            dispatch(setShowLightAnimation(false));
-            dispatch(setShowParticles(false));
-            // Set state to show positive images FIRST
-            setNeutralFlowState(prev => ({
-              ...prev,
-              showNeutralImages: false, // Ensure neutral images flag is false
-              showPositiveImages: true, // Set positive images flag to true
-            }));
-            // CRITICAL: Set imageType to POS-EMOTION IMMEDIATELY (synchronously, not in setTimeout)
-            // This ensures ImageDisplay gets the correct type when it renders
-            console.log('  - Setting imageType to POS-EMOTION (SYNCHRONOUS)');
-            console.log('  - This will fetch: category=NEUTRAL, type=POS-EMOTION, ageGroup=', mapAgeGroup(session?.ageGroup));
-            dispatch(setImageType('POS-EMOTION'));
-            // Wait for Redux state to update and ImageDisplay to fetch new images
-            setTimeout(() => {
-              console.log('  - Now showing images with POS-EMOTION type (fade in/out effect enabled)');
-              dispatch(setShowImages(true));
-              // Enable fade in/out effect for images
-              dispatch(setFadeIn(true));
-              // No light/particle animations for audio 3 in neutral flow
-              dispatch(setShowLightAnimation(false));
-              dispatch(setShowParticles(false));
-            }, 250);
-            // Also show dialogue
+            // Audio 3: Show dialogue first, images will show after audio completes
+            console.log('✓✓✓ Neutral Flow: Audio 3 - Showing dialogue, images will show after audio completes ✓✓✓');
+            // DO NOT show images here - only show dialogue
             const dialogue = neutralFlowDialogues[3];
             if (dialogue) {
               dispatch(setDialogueText(dialogue));
               dispatch(setShowDialogue(true));
               setCurrentDialogueSequence(3);
             }
+            // Images will be shown in audio_stop handler
           } else if (sequence >= 4 && sequence <= 9) {
             // Audio 4-9: Show dialogues only
             console.log(`Neutral Flow: Audio ${sequence} - Showing dialogue only`);
@@ -606,7 +574,29 @@ const MirrorScreen = () => {
           } catch (error) {
             console.error('Error fetching audio 3:', error);
           }
-        }, 10000); // 10 seconds
+          }, 10000); // 10 seconds
+      } else if (session?.category === 'POSITIVE' && sequenceToCheck === 6) {
+        // Audio 6: Show images AFTER dialogue completes
+        console.log('✓✓✓ Positive Flow: Audio 6 ended - Hiding dialogue and showing next 4 images ✓✓✓');
+        console.log('  - Hiding dialogue');
+        console.log('  - Setting imageType: POS-EMOTION');
+        console.log('  - Setting showImages: true');
+        console.log('  - Setting fadeIn: true');
+        console.log('  - Setting showSecondImages: true');
+        
+        // Hide dialogue first
+        dispatch(setShowDialogue(false));
+        
+        // Then show images
+        dispatch(setImageType('POS-EMOTION'));
+        dispatch(setShowImages(true));
+        dispatch(setFadeIn(true));
+        setPositiveFlowState(prev => ({
+          ...prev,
+          showSecondImages: true,
+        }));
+        
+        console.log('✓✓✓ Images should now be visible! ✓✓✓');
       } else if (session?.category === 'NEUTRAL' && sequenceToCheck === 1) {
         console.log('✓✓✓ Neutral Flow: Audio 1 ended - Showing first 4 neutral images for 10 seconds ✓✓✓');
         console.log('  - Setting imageType: NEG-EMOTION');
@@ -661,6 +651,39 @@ const MirrorScreen = () => {
             console.error('Error fetching audio 2:', error);
           }
         }, 10000); // 10 seconds
+      } else if (session?.category === 'NEUTRAL' && sequenceToCheck === 3) {
+        // Audio 3: Show images AFTER dialogue completes
+        console.log('✓✓✓ Neutral Flow: Audio 3 ended - Hiding dialogue and showing 4 positive images ✓✓✓');
+        console.log('  - Session category:', session?.category, '(should be NEUTRAL)');
+        console.log('  - Session ageGroup:', session?.ageGroup, '-> mapped:', mapAgeGroup(session?.ageGroup));
+        console.log('  - Hiding dialogue');
+        console.log('  - Setting imageType: POS-EMOTION');
+        console.log('  - Setting showImages: true');
+        console.log('  - Setting fadeIn: true');
+        console.log('  - Setting showPositiveImages: true');
+        
+        // Hide dialogue first
+        dispatch(setShowDialogue(false));
+        
+        // Set state to show positive images
+        setNeutralFlowState(prev => ({
+          ...prev,
+          showNeutralImages: false,
+          showPositiveImages: true,
+        }));
+        
+        // Set imageType and show images
+        dispatch(setImageType('POS-EMOTION'));
+        setTimeout(() => {
+          console.log('  - Now showing images with POS-EMOTION type (fade in/out effect enabled)');
+          dispatch(setShowImages(true));
+          dispatch(setFadeIn(true));
+          // No light/particle animations
+          dispatch(setShowLightAnimation(false));
+          dispatch(setShowParticles(false));
+        }, 250);
+        
+        console.log('✓✓✓ Positive images should now be visible! ✓✓✓');
       } else if (session?.category === 'NEGATIVE' && sequenceToCheck === 1) {
         console.log('✓✓✓ Negative Flow: Audio 1 ended - Showing first 4 negative images for 10 seconds ✓✓✓');
         console.log('  - Setting imageType: NEG-EMOTION');
@@ -1113,7 +1136,10 @@ const MirrorScreen = () => {
 
 
       {/* Circular Glow Animation for Positive Flow Audio 1 and Audio 7 */}
-      {session?.category === 'POSITIVE' && positiveFlowState.showCircularGlow && (
+      {/* Only show when NOT displaying images */}
+      {session?.category === 'POSITIVE' && 
+       positiveFlowState.showCircularGlow && 
+       !showImages && (
         <CircularGlowAnimation
           show={positiveFlowState.showCircularGlow}
           duration={positiveFlowState.circularGlowDuration}
@@ -1121,8 +1147,9 @@ const MirrorScreen = () => {
         />
       )}
 
-      {/* Yellow Circle Animation when dialogues are shown - replaces all other dialogue animations */}
-      {showDialogue && (
+      {/* Animation during dialogue - only show when NOT displaying images */}
+      {showDialogue && 
+       !showImages && (
         <CircularGlowAnimation
           show={showDialogue}
           duration={30000} // Long duration to keep it visible during dialogue
