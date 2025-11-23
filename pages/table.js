@@ -65,14 +65,17 @@ const TableScreen = () => {
   const backgroundAudioRef = useRef(null);
   const [bg2AudioPath, setBg2AudioPath] = useState(null); // bg2
   const bg2AudioRef = useRef(null);
+  // Track if we've reached the transition point (specific audio completed)
+  const bg1TransitionCompleteRef = useRef(false);
 
   // Handle background audio playback (bg1)
   useEffect(() => {
     const audio = backgroundAudioRef.current;
-    // Don't play if permission not granted, no path, or pran selected
-    if (!audio || !backgroundAudioPath || pran || !audioPermissionGranted) {
-      // Stop audio if pran is selected or path is cleared
-      if (audio && (pran || !backgroundAudioPath || !audioPermissionGranted)) {
+    // Don't play if permission not granted or no path
+    // bg1 should continue playing until specific audio files complete (not when pran is selected)
+    if (!audio || !backgroundAudioPath || !audioPermissionGranted) {
+      // Stop audio if path is cleared or permission not granted
+      if (audio && (!backgroundAudioPath || !audioPermissionGranted)) {
         audio.pause();
         audio.currentTime = 0;
       }
@@ -194,15 +197,16 @@ const TableScreen = () => {
       audio.removeEventListener("loadeddata", handleLoadedData);
       audio.removeEventListener("error", handleError);
     };
-  }, [backgroundAudioPath, pran, audioPermissionGranted]);
+  }, [backgroundAudioPath, audioPermissionGranted]);
 
-  // Handle bg2 audio playback (after pran selection)
+  // Handle bg2 audio playback (after transition point is reached)
   useEffect(() => {
     const audio = bg2AudioRef.current;
-    // Don't play if permission not granted, no path, or pran not selected
-    if (!audio || !bg2AudioPath || !pran || !audioPermissionGranted) {
-      // Stop audio if pran is not selected or path is cleared
-      if (audio && (!pran || !bg2AudioPath || !audioPermissionGranted)) {
+    // Don't play if permission not granted or no path
+    // bg2 should start when transition point is reached, regardless of pran selection
+    if (!audio || !bg2AudioPath || !audioPermissionGranted) {
+      // Stop audio if path is cleared or permission not granted
+      if (audio && (!bg2AudioPath || !audioPermissionGranted)) {
         audio.pause();
         audio.currentTime = 0;
       }
@@ -324,7 +328,7 @@ const TableScreen = () => {
       audio.removeEventListener("loadeddata", handleLoadedData);
       audio.removeEventListener("error", handleError);
     };
-  }, [bg2AudioPath, pran, audioPermissionGranted]);
+  }, [bg2AudioPath, audioPermissionGranted]);
 
   // Table screen is always the audio master
   useEffect(() => {
@@ -375,6 +379,7 @@ const TableScreen = () => {
       }
       setBackgroundAudioPath(null);
       setBg2AudioPath(null);
+      bg1TransitionCompleteRef.current = false;
     });
 
     // Handle phase changes
@@ -402,43 +407,30 @@ const TableScreen = () => {
         }
         setBackgroundAudioPath(null);
         setBg2AudioPath(null);
+        bg1TransitionCompleteRef.current = false;
         return;
       }
 
-      // When phase changes to MOOD_SELECTION or PRAN_SELECTION, pause all audio
+      // When phase changes to MOOD_SELECTION, pause dialogue audio
+      // Note: bg1 and bg2 should continue playing during MOOD_SELECTION
       if (phase === "MOOD_SELECTION") {
-        console.log("Phase changed to MOOD_SELECTION - pausing all audio");
-        // Pause and stop all audio
+        console.log("Phase changed to MOOD_SELECTION - pausing dialogue audio");
+        // Pause and stop dialogue audio (but keep bg1 and bg2 playing)
         window.dispatchEvent(new Event("audio:pause"));
         window.dispatchEvent(new Event("audio:stop"));
         dispatch(clearCurrentAudio());
-        // Stop background audio as well
-        if (backgroundAudioRef.current) {
-          backgroundAudioRef.current.pause();
-          backgroundAudioRef.current.currentTime = 0;
-        }
-        if (bg2AudioRef.current) {
-          bg2AudioRef.current.pause();
-          bg2AudioRef.current.currentTime = 0;
-        }
+        // Don't stop bg1 or bg2 - they should continue playing throughout
       }
 
-      // When phase changes to PRAN_SELECTION, pause all audio
+      // When phase changes to PRAN_SELECTION, pause dialogue audio
+      // Note: bg1 and bg2 should continue playing during PRAN_SELECTION (it's part of the dialogue flow)
       if (phase === "PRAN_SELECTION") {
-        console.log("Phase changed to PRAN_SELECTION - pausing all audio");
-        // Pause and stop all audio
+        console.log("Phase changed to PRAN_SELECTION - pausing dialogue audio");
+        // Pause and stop dialogue audio (but keep bg1 and bg2 playing)
         window.dispatchEvent(new Event("audio:pause"));
         window.dispatchEvent(new Event("audio:stop"));
         dispatch(clearCurrentAudio());
-        // Stop background audio as well
-        if (backgroundAudioRef.current) {
-          backgroundAudioRef.current.pause();
-          backgroundAudioRef.current.currentTime = 0;
-        }
-        if (bg2AudioRef.current) {
-          bg2AudioRef.current.pause();
-          bg2AudioRef.current.currentTime = 0;
-        }
+        // Don't stop bg1 or bg2 - they should continue playing throughout
       }
 
       // Don't reset pran selection if phase changes to PRAN_SELECTION
@@ -558,13 +550,7 @@ const TableScreen = () => {
       dispatch(setPran(pranId));
       // Keep pran selection visible even after phase changes to ENDING
       dispatch(setShowPranSelection(true));
-      // Stop background audio (bg1) when pran is selected
-      if (backgroundAudioRef.current) {
-        console.log("Stopping background audio (bg1) - pran selected");
-        backgroundAudioRef.current.pause();
-        backgroundAudioRef.current.currentTime = 0;
-        setBackgroundAudioPath(null);
-      }
+      // Don't stop bg1 here - it will stop when specific audio files complete
 
       // Fetch pran details to display selected promise
       // Note: pranId is the numeric id field (1-12), not MongoDB _id
@@ -623,61 +609,73 @@ const TableScreen = () => {
         }
       }
 
-      // Load and start bg2 audio
-      try {
-        const response = await api.get("/api/audio?category=COMMON");
-        const bg2Audio = response.data.find((audio) => {
-          const fileName = audio.fileName.toLowerCase();
-          return (
-            fileName === "bg2.mp3" ||
-            (fileName.includes("bg2") && fileName.endsWith(".mp3"))
-          );
-        });
+      // Start bg2 if transition point has been reached
+      // (bg1 should have already stopped when the specific audio completed)
+      if (bg1TransitionCompleteRef.current) {
+        // Load and start bg2 audio
+        const loadBg2 = async () => {
+          try {
+            const response = await api.get("/api/audio?category=COMMON");
+            const bg2Audio = response.data.find((audio) => {
+              const fileName = audio.fileName.toLowerCase();
+              return (
+                fileName === "bg2.mp3" ||
+                (fileName.includes("bg2") && fileName.endsWith(".mp3"))
+              );
+            });
 
-        if (bg2Audio) {
-          console.log("Found bg2 audio:", bg2Audio);
-          // Validate URL before setting
-          const audioUrl =
-            bg2Audio.filePath.startsWith("http://") ||
-            bg2Audio.filePath.startsWith("https://")
-              ? bg2Audio.filePath
-              : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"}${
+            if (bg2Audio) {
+              console.log("Found bg2 audio:", bg2Audio);
+              // Validate URL before setting
+              const audioUrl =
+                bg2Audio.filePath.startsWith("http://") ||
+                bg2Audio.filePath.startsWith("https://")
+                  ? bg2Audio.filePath
+                  : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"}${
+                      bg2Audio.filePath
+                    }`;
+
+              try {
+                new URL(audioUrl); // This will throw if URL is invalid
+                console.log("✅ Valid bg2 audio URL:", audioUrl);
+                console.log(
+                  "Starting background audio (bg2):",
+                  bg2Audio.fileName,
+                  "at path:",
                   bg2Audio.filePath
-                }`;
+                );
+                setBg2AudioPath(bg2Audio.filePath);
+              } catch (err) {
+                console.error("❌ Invalid bg2 audio URL:", audioUrl, err);
+              }
+            } else {
+              console.warn(
+                "bg2.mp3 not found in COMMON audio files. Available files:",
+                response.data.map((a) => a.fileName)
+              );
+              // Fallback: try to use the direct path if bg2 exists in the Common folder
+              const fallbackPath = "/assets/Audio/Common/bg2.mp3";
+              const fallbackUrl = `${
+                process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"
+              }${fallbackPath}`;
+              console.log("Attempting fallback path for bg2:", fallbackPath);
+              try {
+                new URL(fallbackUrl);
+                setBg2AudioPath(fallbackPath);
+              } catch (err) {
+                console.error("❌ Invalid fallback bg2 URL:", fallbackUrl, err);
+              }
+            }
+          } catch (error) {
+            console.error("Error loading bg2 audio:", error);
+          }
+        };
 
-          try {
-            new URL(audioUrl); // This will throw if URL is invalid
-            console.log("✅ Valid bg2 audio URL:", audioUrl);
-            console.log(
-              "Starting background audio (bg2):",
-              bg2Audio.fileName,
-              "at path:",
-              bg2Audio.filePath
-            );
-            setBg2AudioPath(bg2Audio.filePath);
-          } catch (err) {
-            console.error("❌ Invalid bg2 audio URL:", audioUrl, err);
-          }
-        } else {
-          console.warn(
-            "bg2.mp3 not found in COMMON audio files. Available files:",
-            response.data.map((a) => a.fileName)
-          );
-          // Fallback: try to use the direct path if bg2 exists in the Common folder
-          const fallbackPath = "/assets/Audio/Common/bg2.mp3";
-          const fallbackUrl = `${
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"
-          }${fallbackPath}`;
-          console.log("Attempting fallback path for bg2:", fallbackPath);
-          try {
-            new URL(fallbackUrl);
-            setBg2AudioPath(fallbackPath);
-          } catch (err) {
-            console.error("❌ Invalid fallback bg2 URL:", fallbackUrl, err);
-          }
-        }
-      } catch (error) {
-        console.error("Error loading bg2 audio:", error);
+        loadBg2();
+      } else {
+        console.log(
+          "Transition point not reached yet - bg1 will continue until specific audio completes"
+        );
       }
     });
 
@@ -734,13 +732,8 @@ const TableScreen = () => {
       if (currentPhase === "COMMON_FLOW" && !queueLoaded) {
         console.log("Loading COMMON_FLOW audio queue...");
         const response = await api.get("/api/audio?category=COMMON");
-        // Filter out Welcome_to_Yatra audio
-        const filtered = response.data.filter(
-          (audio) =>
-            !audio.fileName.toLowerCase().includes("welcome_to_yatra") &&
-            !audio.fileName.toLowerCase().includes("welcome-to-yatra")
-        );
-        const sorted = filtered.sort((a, b) => a.sequence - b.sequence);
+        // Include all COMMON audio files (including Welcome to Yatra)
+        const sorted = response.data.sort((a, b) => a.sequence - b.sequence);
         dispatch(setAudioQueue(sorted));
         dispatch(setCurrentQueueIndex(0));
         dispatch(setQueueLoaded(true));
@@ -858,6 +851,130 @@ const TableScreen = () => {
       socket.emit("audio_stop");
     }
 
+    // Get current audio in queue for checks
+    const currentAudioInQueue = audioQueue[currentQueueIndex];
+
+    // Check if this is the audio file that should trigger bg2 to start
+    // For positiveFlowDialogues: 3.After-Positive-Images-Record-1.mp3 (sequence 3)
+    // For negativeFlowDialogues: 2.After-Negative-Images.mp3 (sequence 2)
+    // For neutralFlowDialogues: 6.Enlightenment-Record-1.mp3 (sequence 6)
+    if (currentAudioInQueue && session?.category) {
+      const fileName = currentAudioInQueue.fileName || "";
+      const sequence = currentAudioInQueue.sequence;
+      let shouldTransitionToBg2 = false;
+
+      if (session.category === "POSITIVE" && sequence === 3) {
+        // Check if it's the specific file: 3.After-Positive-Images-Record-1.mp3
+        if (
+          fileName.includes("After-Positive-Images-Record-1") ||
+          fileName === "3.After-Positive-Images-Record-1.mp3"
+        ) {
+          shouldTransitionToBg2 = true;
+          console.log(
+            "✅ Positive Flow: Audio 3 (After-Positive-Images-Record-1) completed - transitioning from bg1 to bg2"
+          );
+        }
+      } else if (session.category === "NEGATIVE" && sequence === 2) {
+        // Check if it's the specific file: 2.After-Negative-Images.mp3
+        if (
+          fileName.includes("After-Negative-Images") ||
+          fileName === "2.After-Negative-Images.mp3"
+        ) {
+          shouldTransitionToBg2 = true;
+          console.log(
+            "✅ Negative Flow: Audio 2 (After-Negative-Images) completed - transitioning from bg1 to bg2"
+          );
+        }
+      } else if (session.category === "NEUTRAL" && sequence === 6) {
+        // Check if it's the specific file: 6.Enlightenment-Record-1.mp3
+        if (
+          fileName.includes("Enlightenment-Record-1") ||
+          fileName === "6.Enlightenment-Record-1.mp3"
+        ) {
+          shouldTransitionToBg2 = true;
+          console.log(
+            "✅ Neutral Flow: Audio 6 (Enlightenment-Record-1) completed - transitioning from bg1 to bg2"
+          );
+        }
+      }
+
+      // Stop bg1 and start bg2 if this is the transition point
+      if (shouldTransitionToBg2) {
+        // Mark transition as complete
+        bg1TransitionCompleteRef.current = true;
+        
+        // Stop bg1
+        if (backgroundAudioRef.current) {
+          console.log("Stopping background audio (bg1)");
+          backgroundAudioRef.current.pause();
+          backgroundAudioRef.current.currentTime = 0;
+          setBackgroundAudioPath(null);
+        }
+
+        // Start bg2 immediately when transition point is reached
+        // Load and start bg2 audio
+        const loadBg2 = async () => {
+          try {
+            const response = await api.get("/api/audio?category=COMMON");
+            const bg2Audio = response.data.find((audio) => {
+              const fileName = audio.fileName.toLowerCase();
+              return (
+                fileName === "bg2.mp3" ||
+                (fileName.includes("bg2") && fileName.endsWith(".mp3"))
+              );
+            });
+
+            if (bg2Audio) {
+              console.log("Found bg2 audio:", bg2Audio);
+              // Validate URL before setting
+              const audioUrl =
+                bg2Audio.filePath.startsWith("http://") ||
+                bg2Audio.filePath.startsWith("https://")
+                  ? bg2Audio.filePath
+                  : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"}${
+                      bg2Audio.filePath
+                    }`;
+
+              try {
+                new URL(audioUrl); // This will throw if URL is invalid
+                console.log("✅ Valid bg2 audio URL:", audioUrl);
+                console.log(
+                  "Starting background audio (bg2):",
+                  bg2Audio.fileName,
+                  "at path:",
+                  bg2Audio.filePath
+                );
+                setBg2AudioPath(bg2Audio.filePath);
+              } catch (err) {
+                console.error("❌ Invalid bg2 audio URL:", audioUrl, err);
+              }
+            } else {
+              console.warn(
+                "bg2.mp3 not found in COMMON audio files. Available files:",
+                response.data.map((a) => a.fileName)
+              );
+              // Fallback: try to use the direct path if bg2 exists in the Common folder
+              const fallbackPath = "/assets/Audio/Common/bg2.mp3";
+              const fallbackUrl = `${
+                process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"
+              }${fallbackPath}`;
+              console.log("Attempting fallback path for bg2:", fallbackPath);
+              try {
+                new URL(fallbackUrl);
+                setBg2AudioPath(fallbackPath);
+              } catch (err) {
+                console.error("❌ Invalid fallback bg2 URL:", fallbackUrl, err);
+              }
+            }
+          } catch (error) {
+            console.error("Error loading bg2 audio:", error);
+          }
+        };
+
+        loadBg2();
+      }
+    }
+
     // Special handling for audio 8 (Choosing-Emotion) in COMMON flow
     if (currentPhase === "COMMON_FLOW" || currentPhase === "MOOD_SELECTION") {
       const currentAudioInQueue = audioQueue[currentQueueIndex];
@@ -876,9 +993,6 @@ const TableScreen = () => {
         }
       }
     }
-
-    // Get current audio in queue for checks
-    const currentAudioInQueue = audioQueue[currentQueueIndex];
 
     // Special handling for Positive Flow: Audio 2 ends - don't auto-play audio 3
     // Images will show for 10 seconds, then mirror.js will manually trigger audio 3
@@ -1172,8 +1286,8 @@ const TableScreen = () => {
           }}
         />
       )}
-      {/* Background audio (bg2) - plays in loop after pran is selected */}
-      {audioPermissionGranted && bg2AudioPath && pran && (
+      {/* Background audio (bg2) - plays in loop after transition point is reached */}
+      {audioPermissionGranted && bg2AudioPath && (
         <audio
           ref={bg2AudioRef}
           src={
