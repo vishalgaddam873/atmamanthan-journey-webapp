@@ -405,6 +405,42 @@ const TableScreen = () => {
         return;
       }
 
+      // When phase changes to MOOD_SELECTION or PRAN_SELECTION, pause all audio
+      if (phase === "MOOD_SELECTION") {
+        console.log("Phase changed to MOOD_SELECTION - pausing all audio");
+        // Pause and stop all audio
+        window.dispatchEvent(new Event("audio:pause"));
+        window.dispatchEvent(new Event("audio:stop"));
+        dispatch(clearCurrentAudio());
+        // Stop background audio as well
+        if (backgroundAudioRef.current) {
+          backgroundAudioRef.current.pause();
+          backgroundAudioRef.current.currentTime = 0;
+        }
+        if (bg2AudioRef.current) {
+          bg2AudioRef.current.pause();
+          bg2AudioRef.current.currentTime = 0;
+        }
+      }
+
+      // When phase changes to PRAN_SELECTION, pause all audio
+      if (phase === "PRAN_SELECTION") {
+        console.log("Phase changed to PRAN_SELECTION - pausing all audio");
+        // Pause and stop all audio
+        window.dispatchEvent(new Event("audio:pause"));
+        window.dispatchEvent(new Event("audio:stop"));
+        dispatch(clearCurrentAudio());
+        // Stop background audio as well
+        if (backgroundAudioRef.current) {
+          backgroundAudioRef.current.pause();
+          backgroundAudioRef.current.currentTime = 0;
+        }
+        if (bg2AudioRef.current) {
+          bg2AudioRef.current.pause();
+          bg2AudioRef.current.currentTime = 0;
+        }
+      }
+
       // Don't reset pran selection if phase changes to PRAN_SELECTION
       if (phase !== "PRAN_SELECTION") {
         dispatch(setShowPranSelection(false));
@@ -438,6 +474,16 @@ const TableScreen = () => {
 
     // Handle audio events
     socket.on("audio_play", ({ audioPath, audioId }) => {
+      // Don't play audio if we're in MOOD_SELECTION or PRAN_SELECTION phase
+      if (currentPhase === "MOOD_SELECTION") {
+        console.log("Audio play blocked - currently in MOOD_SELECTION phase");
+        return;
+      }
+      if (currentPhase === "PRAN_SELECTION") {
+        console.log("Audio play blocked - currently in PRAN_SELECTION phase");
+        return;
+      }
+
       dispatch(setCurrentAudio(audioPath));
       dispatch(setCurrentAudioId(audioId));
 

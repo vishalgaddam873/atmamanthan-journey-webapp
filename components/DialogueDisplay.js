@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 
-const DialogueDisplay = ({ text, show = false, duration = 0 }) => {
+const DialogueDisplay = ({ text, show = false, duration = 0, speed = 'normal' }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [opacity, setOpacity] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
@@ -62,27 +62,32 @@ const DialogueDisplay = ({ text, show = false, duration = 0 }) => {
         setCurrentCharIndex(currentCharIndex + 1);
         
         // Schedule next character (faster for spaces, normal for others)
-        const delay = currentLine[currentCharIndex] === ' ' ? 30 : 50;
-        charTimeoutRef.current = setTimeout(typeNextChar, delay);
+        // Use faster speed if speed prop is 'fast'
+        const charDelay = speed === 'fast' 
+          ? (currentLine[currentCharIndex] === ' ' ? 10 : 15)
+          : (currentLine[currentCharIndex] === ' ' ? 30 : 50);
+        charTimeoutRef.current = setTimeout(typeNextChar, charDelay);
       } else {
         // Line complete, move to next line
         if (currentLineIndex < lines.length - 1) {
           setCurrentLineIndex(currentLineIndex + 1);
           setCurrentCharIndex(0);
-          // Small pause between lines
-          timeoutRef.current = setTimeout(typeNextChar, 300);
+          // Small pause between lines (faster if speed is 'fast')
+          const lineDelay = speed === 'fast' ? 100 : 300;
+          timeoutRef.current = setTimeout(typeNextChar, lineDelay);
         }
       }
     };
 
-    // Start typing after a brief delay
-    timeoutRef.current = setTimeout(typeNextChar, 200);
+    // Start typing after a brief delay (faster if speed is 'fast')
+    const initialDelay = speed === 'fast' ? 50 : 200;
+    timeoutRef.current = setTimeout(typeNextChar, initialDelay);
 
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (charTimeoutRef.current) clearTimeout(charTimeoutRef.current);
     };
-  }, [show, text, isVisible, opacity, currentLineIndex, currentCharIndex]);
+  }, [show, text, isVisible, opacity, currentLineIndex, currentCharIndex, speed]);
 
   // Debug logging
   useEffect(() => {

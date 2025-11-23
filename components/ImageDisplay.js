@@ -35,6 +35,12 @@ const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = n
     const fetchImages = async () => {
       try {
         setLoading(true);
+        // Reset state immediately when fetching new images
+        setCurrentIndex(0);
+        setFade(false);
+        setOpacity(0);
+        setScale(1);
+        
         console.log('ImageDisplay: Fetching images with params:', { category, ageGroup, type, imageRange });
         const response = await api.get('/api/images', {
           params: { category, ageGroup, type }
@@ -50,16 +56,43 @@ const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = n
             return order >= imageRange.start && order <= imageRange.end;
           });
           console.log(`ImageDisplay: Filtered from ${beforeFilter} to ${sortedImages.length} images (displayOrder ${imageRange.start}-${imageRange.end})`);
+          
+          // Log the actual displayOrder values of filtered images to verify uniqueness
+          const displayOrders = sortedImages.map(img => img.displayOrder).sort((a, b) => a - b);
+          console.log('ImageDisplay: Filtered image displayOrders:', displayOrders);
+          
+          // Check for duplicates
+          const uniqueOrders = new Set(displayOrders);
+          if (uniqueOrders.size !== displayOrders.length) {
+            console.warn('⚠️ WARNING: Duplicate displayOrder values found!', displayOrders);
+          }
         } else {
           console.log(`ImageDisplay: No imageRange filter, showing all ${sortedImages.length} images`);
         }
         
-        setImages(sortedImages);
+        // Ensure we have unique images (by filePath) to prevent duplicates
+        const uniqueImages = [];
+        const seenPaths = new Set();
+        for (const img of sortedImages) {
+          const path = img.filePath || img.fileName;
+          if (!seenPaths.has(path)) {
+            seenPaths.add(path);
+            uniqueImages.push(img);
+          } else {
+            console.warn('⚠️ Duplicate image detected and removed:', path);
+          }
+        }
+        
+        if (uniqueImages.length !== sortedImages.length) {
+          console.warn(`⚠️ Removed ${sortedImages.length - uniqueImages.length} duplicate image(s)`);
+        }
+        
+        setImages(uniqueImages);
         setCurrentIndex(0);
         setScale(1);
         setOpacity(0);
         
-        if (sortedImages.length === 0) {
+        if (uniqueImages.length === 0) {
           console.warn('ImageDisplay: No images found! Check database for:', { category, ageGroup, type });
         }
       } catch (error) {
@@ -70,7 +103,7 @@ const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = n
     };
 
     fetchImages();
-  }, [category, ageGroup, type, imageRange]);
+  }, [category, ageGroup, type, imageRange?.start, imageRange?.end]);
 
   // Animation cycle: Fade In → Hold → Fade Out → Next Image
   // For 4 images in 10 seconds: 2.5 seconds per image
@@ -82,9 +115,14 @@ const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = n
       return;
     }
 
-    // Clear any existing timeouts
+    // Clear any existing timeouts when starting new animation cycle
     timeoutsRef.current.forEach(timeout => clearTimeout(timeout));
     timeoutsRef.current = [];
+    
+    // Reset to first image when starting new cycle
+    setCurrentIndex(0);
+    setOpacity(0);
+    setScale(1);
 
     // Calculate timing: 2.5 seconds per image
     // - Fade in: 0.5s
@@ -115,6 +153,10 @@ const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = n
           if (images.length > 1) {
             setCurrentIndex((prev) => {
               const next = (prev + 1) % images.length;
+              // Safety check: if somehow we get the same index, skip to next
+              if (next === prev && images.length > 1) {
+                return (next + 1) % images.length;
+              }
               return next;
             });
             setScale(1);
@@ -140,6 +182,7 @@ const ImageDisplay = ({ category, ageGroup, type, fadeIn = false, imageRange = n
     runAnimationCycle();
 
     return () => {
+      // Cleanup: clear all timeouts when component unmounts or dependencies change
       timeoutsRef.current.forEach(timeout => clearTimeout(timeout));
       timeoutsRef.current = [];
     };
