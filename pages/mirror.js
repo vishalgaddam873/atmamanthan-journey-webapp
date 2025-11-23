@@ -529,6 +529,8 @@ const MirrorScreen = () => {
         console.log('  - Setting fadeIn: true');
         console.log('  - Setting showFirstImages: true');
         
+        // Hide dialogue when showing images
+        dispatch(setShowDialogue(false));
         dispatch(setImageType('POS-EMOTION'));
         dispatch(setShowImages(true));
         dispatch(setFadeIn(true));
@@ -604,6 +606,8 @@ const MirrorScreen = () => {
         console.log('  - Setting fadeIn: true');
         console.log('  - Setting showNeutralImages: true');
         
+        // Hide dialogue when showing images
+        dispatch(setShowDialogue(false));
         dispatch(setImageType('NEG-EMOTION'));
         dispatch(setShowImages(true));
         dispatch(setFadeIn(true));
@@ -691,6 +695,8 @@ const MirrorScreen = () => {
         console.log('  - Setting fadeIn: true');
         console.log('  - Setting showNegativeImages: true');
         
+        // Hide dialogue when showing images
+        dispatch(setShowDialogue(false));
         dispatch(setImageType('NEG-EMOTION'));
         dispatch(setShowImages(true));
         dispatch(setFadeIn(true));
@@ -744,6 +750,8 @@ const MirrorScreen = () => {
         console.log('  - Setting fadeIn: true');
         console.log('  - Setting showPositiveImages: true');
         
+        // Hide dialogue when showing images
+        dispatch(setShowDialogue(false));
         dispatch(setImageType('POS-EMOTION'));
         dispatch(setShowImages(true));
         dispatch(setFadeIn(true));
@@ -911,6 +919,18 @@ const MirrorScreen = () => {
         // Reset mirror screen state when session resets
         dispatch(resetMirrorState());
         setCurrentDialogueSequence(null);
+      } else if (phase === 'MOOD_SELECTION') {
+        // When phase changes to MOOD_SELECTION, pause all audio
+        console.log('Phase changed to MOOD_SELECTION on mirror screen - pausing all audio');
+        window.dispatchEvent(new Event('audio:pause'));
+        window.dispatchEvent(new Event('audio:stop'));
+        dispatch(clearCurrentAudio());
+      } else if (phase === 'PRAN_SELECTION') {
+        // When phase changes to PRAN_SELECTION, pause all audio
+        console.log('Phase changed to PRAN_SELECTION on mirror screen - pausing all audio');
+        window.dispatchEvent(new Event('audio:pause'));
+        window.dispatchEvent(new Event('audio:stop'));
+        dispatch(clearCurrentAudio());
       } else if (phase === 'CATEGORY_FLOW' && session?.category === 'POSITIVE') {
         // Positive flow started - prepare for mirror phase
         console.log('Positive flow started - preparing mirror screen');
@@ -1158,9 +1178,15 @@ const MirrorScreen = () => {
       )}
       
       {/* Dialogue display - shown during all flows - highest z-index for text (z-50) */}
+      {/* Hide dialogue when images are showing */}
       <DialogueDisplay
         text={dialogueText}
-        show={showDialogue}
+        show={showDialogue && !showImages}
+        speed={
+          dialogueText === 'अभी आपने जो देखा वह आप नहीं थे। वह केवल आपके विचारों का प्रतिबिंब था।\nआप सिर्फ ये विचार नहीं हैं, आप उनसे कहीं ज्यादा बढ़कर हैं।'
+            ? 'fast'
+            : 'normal'
+        }
       />
 
       {/* Mirror reflection effect - hidden for Positive Flow */}
