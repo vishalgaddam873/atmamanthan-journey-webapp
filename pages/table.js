@@ -1088,47 +1088,17 @@ const TableScreen = () => {
       const nextIndex = currentQueueIndex + 1;
       const nextAudio = audioQueue[nextIndex];
 
-      // Calculate pause duration based on current audio and phase
-      let pauseDuration = 0;
-
-      // Special handling for COMMON_FLOW pauses
-      if (currentPhase === "COMMON_FLOW") {
-        if (currentAudioInQueue) {
-          // After audio 7 (Dark-Room-Entry), pause for 8 seconds before audio 8
-          if (currentAudioInQueue.sequence === 7) {
-            pauseDuration = 6500; // 8 seconds
-            console.log(
-              `COMMON_FLOW: Audio 7 ended - Pausing for 8 seconds before audio 8 (Ankho ki Patti hataye)`
-            );
-          } else {
-            // After all other audios in COMMON_FLOW, pause for 4 seconds
-            pauseDuration = 2500; // 4 seconds
-            console.log(
-              `COMMON_FLOW: Audio ${currentAudioInQueue.sequence} ended - Pausing for 4 seconds before next audio`
-            );
-          }
-        }
-      }
-
-      // Play next audio after pause (if any)
-      const playNextAudio = () => {
-        console.log(
-          `Playing next audio: ${nextAudio.fileName} (sequence: ${nextAudio.sequence}, index: ${nextIndex}, cuePoint: ${nextAudio.cuePoint})`
-        );
-        dispatch(setCurrentQueueIndex(nextIndex));
-        if (socket) {
-          socket.emit("audio_play", {
-            audioPath: nextAudio.filePath,
-            audioId: nextAudio._id,
-            cue: nextIndex,
-          });
-        }
-      };
-
-      if (pauseDuration > 0) {
-        setTimeout(playNextAudio, pauseDuration);
-      } else {
-        playNextAudio();
+      // Play next audio immediately (no pauses)
+      console.log(
+        `Playing next audio: ${nextAudio.fileName} (sequence: ${nextAudio.sequence}, index: ${nextIndex}, cuePoint: ${nextAudio.cuePoint})`
+      );
+      dispatch(setCurrentQueueIndex(nextIndex));
+      if (socket) {
+        socket.emit("audio_play", {
+          audioPath: nextAudio.filePath,
+          audioId: nextAudio._id,
+          cue: nextIndex,
+        });
       }
     } else {
       // Queue finished
